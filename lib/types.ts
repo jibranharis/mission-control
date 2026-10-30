@@ -79,14 +79,75 @@ export interface ClaudeThread {
   progress?: number;
   url?: string;
   updatedAt?: string;
+  /** Where the thread ran: a cloud session (claude.ai) or Claude Code on the Mac. */
+  origin?: "cloud" | "mac";
+  model?: string;
+  tokens?: number;
+  cost?: number;
 }
+
+export type GraphNodeKind = "agent" | "project" | "thread" | "subagent" | "branch" | "commit" | "pr" | "session";
 
 export interface GraphNode {
   id: string;
-  kind: "agent" | "project" | "thread" | "subagent";
+  kind: GraphNodeKind;
   label: string;
+  /** Small mono line under the label, e.g. a date or an author. */
+  meta?: string;
   state?: ThreadState;
   url?: string;
+}
+
+/** Token counts for one slice of Claude Code usage (a model, a project, a day). */
+export interface TokenRow {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  /** API-equivalent value in USD at list prices (a Pro plan isn't billed per token). */
+  cost: number;
+  messages: number;
+  sessions?: number;
+}
+
+export interface TokenUsage {
+  /** Earliest transcript included. */
+  since?: string;
+  collectedAt: string;
+  total: TokenRow;
+  byModel: (TokenRow & { model: string })[];
+  byProject: (TokenRow & { project: string })[];
+  /** Oldest first, one row per local day. */
+  daily: { date: string; input: number; output: number; cost: number; messages: number }[];
+}
+
+/** A project Claude has worked on: a local repo, a GitHub repo, or both. */
+export interface ClaudeProject {
+  id: string;
+  name: string;
+  path?: string;
+  repo?: string;
+  url?: string;
+  description?: string;
+  language?: string;
+  pinned?: boolean;
+  branch?: string;
+  updatedAt?: string;
+  stats: { commits?: number; openPRs?: number; mergedPRs?: number; sessions?: number; tokens?: number; cost?: number };
+  graph: { nodes: GraphNode[]; edges: [string, string][] };
+}
+
+export interface RepoCard {
+  name: string;
+  fullName: string;
+  url: string;
+  description?: string;
+  language?: string;
+  stars: number;
+  pushedAt: string;
+  private: boolean;
+  homepage?: string;
+  topics?: string[];
 }
 
 export interface ClaudeSnapshot {
@@ -109,6 +170,12 @@ export interface ClaudeSnapshot {
   threads: ClaudeThread[];
   graph: { nodes: GraphNode[]; edges: [string, string][] };
   updates: UpdateItem[];
+  /** Claude Code token usage from the Mac collector. */
+  tokens?: TokenUsage;
+  /** Every project, with its flow chart. */
+  projects?: ClaudeProject[];
+  /** GitHub repositories, for the showcase. */
+  repos?: RepoCard[];
 }
 
 export interface GymDay {

@@ -289,3 +289,36 @@ details[open] summary::before { content: "− "; }
 .note-body { color: var(--text-2); font-size: 14px; line-height: 1.5; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .note-card.open .note-body { display: block; -webkit-line-clamp: unset; }
 .note-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* Claude page */
+.stats { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); }
+.stat { display: flex; flex-direction: column; gap: 2px; padding: 12px 18px; border-right: 1px solid var(--line); min-width: 96px; }
+.stat:last-child { border-right: 0; }
+.stat strong { font-family: var(--font-display); font-size: 26px; font-weight: 600; line-height: 1; }
+.stat span { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--muted); }
+.stat .hint { color: var(--dim); }
+.swatch { display: inline-block; width: 9px; height: 9px; margin-right: 8px; vertical-align: 0; }
+.bars.tall { height: 110px; }
+.bars div:hover { background: var(--blue-soft); }
+.projects { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 520px; }
+.project-list { border-right: 1px solid var(--line); display: flex; flex-direction: column; max-height: 760px; overflow-y: auto; }
+.project-card { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 14px 18px; border: 0; border-bottom: 1px solid var(--line-soft); background: none; cursor: pointer; min-height: 44px; }
+.project-card:hover { background: var(--hover); }
+.project-card[aria-pressed="true"] { background: var(--panel-raised); box-shadow: inset 3px 0 0 var(--blue); }
+.project-detail { display: flex; flex-direction: column; min-width: 0; }
+.project-meta { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: flex-start; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.project-detail .graph { height: 520px; }
+.node .meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: var(--muted); }
+.node.commit, .node.session { font-weight: 400; }
+.node.commit { border-color: var(--line); }
+.node.pr { border-color: var(--line-strong); }
+.node.branch { background: var(--panel-raised); }
+.repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.repo { display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); min-height: 44px; }
+.repo:hover { background: var(--hover); }
+@media (max-width: 860px) {
+  .projects { grid-template-columns: 1fr; }
+  .project-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 280px; }
+  .stat { min-width: 0; flex: 1; padding: 10px 12px; }
+  .stat .hint { display: none; }
+}

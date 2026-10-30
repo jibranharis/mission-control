@@ -17,11 +17,13 @@ const list = (v: unknown) => (Array.isArray(v) ? v : []);
 
 type History = NonNullable<ClaudeSnapshot["usage"]["history"]>;
 
+const CLAUDE_FIELDS = ["usage", "threads", "tokens", "projects", "repos", "graph", "updates"];
+
 async function saveClaude(push: ClaudePush) {
-  const prev = await getJSON<History>(KEYS.usageHistory, []);
-  const snap = normalizeClaude(push, prev);
+  const [prev, prevSnap] = await Promise.all([getJSON<History>(KEYS.usageHistory, []), getJSON<ClaudeSnapshot | null>(KEYS.claude, null)]);
+  const snap = normalizeClaude(push, prev, prevSnap);
   const { session, weekly } = snap.usage;
-  if (session || weekly) {
+  if (push.usage && (session || weekly)) {
     const history = [...prev, { at: snap.usage.readAt ?? snap.generatedAt, session: session?.pct, weekly: weekly?.pct }].slice(-60);
     snap.usage.history = history;
     await setJSON(KEYS.usageHistory, history);
@@ -31,7 +33,7 @@ async function saveClaude(push: ClaudePush) {
 
 /**
  * Lets outside jobs push snapshots in:
- *   POST /api/ingest/claude  body: ClaudeSnapshot
+ *   POST /api/ingest/claude  body: ClaudePush (usage, threads, tokens, projects, repos; fields left out keep their last value)
  *   POST /api/ingest/docket  body: DocketSnapshot, plus an optional `claude` push (from the Docket sync tasks)
  *   POST /api/ingest/canvas  body: CanvasData
  * Authenticated with `Authorization: Bearer $INGEST_TOKEN`.
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sou
 
   switch (source) {
     case "claude":
-      if (!("threads" in b || "usage" in b)) return NextResponse.json({ error: "expected usage or threads" }, { status: 422 });
+      if (!CLAUDE_FIELDS.some((k) => k in b)) return NextResponse.json({ error: `expected one of ${CLAUDE_FIELDS.join(", ")}` }, { status: 422 });
       await saveClaude(b as ClaudePush);
       break;
     case "docket": {

@@ -15,6 +15,7 @@ A personal command console for one person's day: what Claude is working on, what
 | 05 Usage | Session and weekly limit bars, share of usage by project, and messages per day | Claude snapshot |
 | 06 Updates | New grades, mail, PRs, and finished Claude work from the last two days | Gmail, Canvas, Claude snapshot |
 | 07 Project graph | A draggable flow chart of agent → projects → threads → sub-agents. Clicking a node with a link opens it in Claude | Claude snapshot |
+| Claude tab | Every project with a draggable flow chart (branches, commits, pull requests, sessions; finished work in teal), tokens by model and by day with an API-equivalent value, all threads, and a GitHub showcase | Mac collector, GitHub, Claude snapshot |
 | 08 Training | This week's split; tap a day to log it | `GYM_SPLIT`, see `lib/config.ts` |
 | 09 Notes | A scratchpad that autosaves | Stored in the database |
 
@@ -69,7 +70,15 @@ curl -X POST https://<your-app>/api/ingest/claude \
   -d @snapshot.json
 ```
 
-The push is `ClaudePush` in [`lib/claude.ts`](lib/claude.ts): `usage` (the limit bars from claude.ai's usage page as `limits: [{ label, pct, resets }]`), `threads` (`{ id, title, project, state, step, url }`), and optionally `graph` and `updates`. Without a graph, one is built from the threads, and each push adds to a history of weekly usage. Canvas snapshots post to `/api/ingest/canvas` in the `CanvasData` shape.
+The push is `ClaudePush` in [`lib/claude.ts`](lib/claude.ts): `usage` (the limit bars from claude.ai's usage page as `limits: [{ label, pct, resets }]`), `threads` (`{ id, title, project, state, step, url }`), `tokens`, `projects`, `repos`, and optionally `graph` and `updates`. Fields left out keep their last value, so several pushers can share the endpoint; each pusher's `origin` (`cloud` or `mac`) replaces only its own threads. Canvas snapshots post to `/api/ingest/canvas` in the `CanvasData` shape.
+
+**Claude Code on your Mac (tokens by model, projects, flow charts).** [`scripts/claude-collector.py`](scripts/claude-collector.py) reads the transcripts Claude Code keeps in `~/.claude/projects`, adds up tokens per model, project and day (with an API-equivalent value at list prices), lists the sessions as threads, and builds a flow chart for every repo Claude has worked in (branches, commits, sessions) plus the repos under `~/Projects` and `~/Documents/GitHub`. Install it once and it runs every 10 minutes:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jibranharis/mission-control/main/scripts/install-collector.sh | bash -s -- https://<your-app> $INGEST_TOKEN
+```
+
+**GitHub showcase.** Set `GITHUB_USERS` (comma-separated logins) and the Claude page lists those users' public repositories. Add a `GITHUB_TOKEN` (fine-grained, read-only) to include private repositories and to draw each repository's pull requests and latest commits into its flow chart.
 
 ## Stack
 

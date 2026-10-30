@@ -2,6 +2,8 @@ import type { ClaudeSnapshot, DashboardData, GymDay, SourceStatus, TaskItem, Upd
 import { SAMPLE_DATA, demoCalendar, demoCanvas, demoClaude, demoGmail, emptyCalendar, emptyCanvas, emptyClaude } from "@/lib/demo";
 import { fetchCalendar, fetchGmail, googleConfigured } from "@/lib/sources/google";
 import { fetchCanvas } from "@/lib/sources/canvas";
+import { fetchGitHub } from "@/lib/sources/github";
+import { mergeProjects } from "@/lib/claude";
 import { getJSON, KEYS } from "@/lib/store";
 import { GYM_SPLIT } from "@/lib/config";
 import { DOCKET_PREFIX, docketCalendar, type DocketView } from "@/lib/sources/docket";
@@ -43,7 +45,7 @@ export async function buildDashboard(): Promise<DashboardData> {
   const docket = await getJSON<DocketView | null>(KEYS.docket, null);
   // Google Calendar directly when it's set up, otherwise the calendar and schedule Docket's sync carried over.
   const loadCalendar = googleConfigured ? fetchCalendar : async () => (docket ? docketCalendar(docket) : null);
-  const [calendar, gmail, canvas, claude, todos, done, notes] = await Promise.all([
+  const [calendar, gmail, canvas, claude, todos, done, notes, github] = await Promise.all([
     resolve(googleConfigured || Boolean(docket), loadCalendar, emptyCalendar, demoCalendar),
     resolve(googleConfigured, fetchGmail, () => [], demoGmail),
     resolve(true, async () => (await fetchCanvas())?.data ?? null, emptyCanvas, demoCanvas),
@@ -51,7 +53,17 @@ export async function buildDashboard(): Promise<DashboardData> {
     getJSON<Todo[]>(KEYS.todos, []),
     getJSON<Record<string, string>>(KEYS.done, {}),
     getJSON<string>(KEYS.notes, ""),
+    fetchGitHub(),
   ]);
+
+  // GitHub fills in repositories and projects the Mac collector hasn't sent; pushed ones win.
+  if (github) {
+    const pushed = new Map((claude.data.repos ?? []).map((r) => [r.fullName.toLowerCase(), r]));
+    claude.data.repos = [...github.repos.filter((r) => !pushed.has(r.fullName.toLowerCase())), ...pushed.values()].sort((a, b) =>
+      b.pushedAt.localeCompare(a.pushedAt),
+    );
+    claude.data.projects = mergeProjects(claude.data.projects, github.projects);
+  }
 
   const tomorrow = startOfDay(1).getTime();
   const tasks: TaskItem[] = [];
