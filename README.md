@@ -50,6 +50,15 @@ Sign in when the URL opens, and copy the printed `GOOGLE_REFRESH_TOKEN` into you
 
 **Canvas.** In Canvas, open **Account → Settings → New Access Token**, then set `CANVAS_BASE_URL` (for example `https://canvas.ucdavis.edu`) and `CANVAS_TOKEN`. If you'd rather keep using a scraper, leave those blank and have it push to the ingest endpoint instead.
 
+**Docket.** If your coursework already lands in a Docket artifact, have each Docket sync finish by pushing its items here and reading back what you checked off:
+
+```bash
+# push: { items, tasks?, courses?, announcements?, grades? }  (DocketSnapshot in lib/sources/docket.ts)
+curl -X POST https://<your-app>/api/ingest/docket -H "Authorization: Bearer $INGEST_TOKEN" -H "Content-Type: application/json" -d @docket.json
+# pull: items checked off in Mission Control, to mark done in Docket
+curl https://<your-app>/api/ingest/docket -H "Authorization: Bearer $INGEST_TOKEN"
+```
+
 **Claude.** Claude doesn't have a public API for your plan's usage or your projects, so the Claude panels read a snapshot that something else pushes, such as a scheduled Claude routine or a local script:
 
 ```bash

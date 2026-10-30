@@ -48,7 +48,7 @@ export async function buildDashboard(): Promise<DashboardData> {
 
   for (const a of canvas.data.assignments) {
     const due = new Date(a.due).getTime();
-    if (due >= tomorrow || a.submitted) continue;
+    if (due >= tomorrow || a.submitted || due < Date.now() - 7 * 86_400_000) continue;
     tasks.push({
       id: a.id,
       title: `${a.course ? a.course + " · " : ""}${a.title}`,
