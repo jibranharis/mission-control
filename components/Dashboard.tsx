@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { DashboardData, SourceStatus, TaskItem, ThreadState, UpdateItem } from "@/lib/types";
+import { CoursesView, DeenView, ExamsStrip, NoDocket, NotesView, WeekView, WorkView } from "./DocketViews";
+import { PRAYERS, PRAYER_ORDER, prayerTimes } from "@/lib/deen";
 
 const ProjectGraph = dynamic(() => import("./ProjectGraph").then((m) => m.ProjectGraph), {
   ssr: false,
@@ -10,6 +12,16 @@ const ProjectGraph = dynamic(() => import("./ProjectGraph").then((m) => m.Projec
 });
 
 const REFRESH_MS = 3 * 60_000;
+
+const TABS = [
+  ["today", "TODAY"],
+  ["courses", "COURSES"],
+  ["week", "WEEK"],
+  ["work", "WORK"],
+  ["deen", "DEEN"],
+  ["notes", "NOTES"],
+] as const;
+type Tab = (typeof TABS)[number][0];
 
 const SOURCE_COLOR: Record<TaskItem["source"] | UpdateItem["source"], string> = {
   CANVAS: "var(--amber)",
@@ -46,6 +58,22 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
   const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
   const now = useNow();
   const tz = data.timezone;
+  const [tab, setTab] = useState<Tab>("today");
+
+  useEffect(() => {
+    const read = () => {
+      const h = location.hash.slice(1);
+      setTab(TABS.some(([id]) => id === h) ? (h as Tab) : "today");
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+  const go = (t: Tab) => {
+    history.replaceState(null, "", t === "today" ? location.pathname : `#${t}`);
+    setTab(t);
+    window.scrollTo({ top: 0 });
+  };
 
   const fmt = useCallback(
     (iso: string, opts: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleString("en-US", { timeZone: tz, ...opts }),
@@ -78,6 +106,11 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
       ...d,
       tasks: d.tasks.map((t) => (t.id === id ? { ...t, done } : t)),
       gym: d.gym.map((g) => (`gym:${g.date}` === id ? { ...g, status: done ? "done" : "planned" } : g)),
+      docket: d.docket && {
+        ...d.docket,
+        items: d.docket.items.map((i) => (`docket:${i.id}` === id ? { ...i, status: done ? "done" : "todo" } : i)),
+        tasks: d.docket.tasks?.map((t) => (`docket:task:${t.id}` === id ? { ...t, status: done ? "done" : "todo" } : t)),
+      },
     }));
     await fetch("/api/done", { method: "POST", body: JSON.stringify({ id, done }) });
   };
@@ -85,8 +118,18 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
   const hour = Number(now ? fmt(now.toISOString(), { hour: "numeric", hourCycle: "h23" }) : 12);
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const open = data.tasks.filter((t) => t.dueToday && !t.done);
+  const overdue = open.filter((t) => t.meta === "OVERDUE").length;
   const running = data.claude.threads.filter((t) => t.state === "running" || t.state === "needs_you");
   const degraded = Object.entries(data.sources).filter(([, s]) => s === "error");
+  const prayer = useMemo(() => {
+    if (!now) return null;
+    const key = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    const pt = prayerTimes(key, tz, data.docket?.deen?.method);
+    const id = PRAYERS.find((p) => pt[p] > now);
+    if (!id) return null;
+    const mins = Math.round((pt[id].getTime() - now.getTime()) / 60000);
+    return `${PRAYER_ORDER.find(([k]) => k === id)![1].toUpperCase()} ${mins >= 60 ? `${Math.floor(mins / 60)}H ` : ""}${mins % 60}M`;
+  }, [now, tz, data.docket?.deen?.method]);
 
   return (
     <>
@@ -107,6 +150,11 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
             <span className="live-dot" style={{ background: degraded.length ? "var(--amber)" : "var(--teal)" }} />
             {degraded.length ? `${degraded.length} SOURCE${degraded.length > 1 ? "S" : ""} DEGRADED` : "ALL SYSTEMS NOMINAL"}
           </span>
+          {prayer && (
+            <a href="#deen" onClick={(e) => (e.preventDefault(), go("deen"))}>
+              {prayer}
+            </a>
+          )}
           <span>SYNC {now ? ago(data.generatedAt, now) : "NOW"}</span>
           {signOut && (
             <form method="post" action="/api/logout">
@@ -118,6 +166,33 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
         </div>
       </header>
 
+      <nav className="tabs" aria-label="Sections">
+        {TABS.map(([id, label]) => (
+          <a key={id} href={`#${id}`} aria-current={tab === id ? "page" : undefined} onClick={(e) => (e.preventDefault(), go(id))}>
+            {label}
+          </a>
+        ))}
+      </nav>
+
+      {tab !== "today" && (
+        <main className="main">
+          {tab === "deen" ? (
+            <DeenView v={data.docket} tz={tz} now={now} />
+          ) : !data.docket ? (
+            <NoDocket what={tab === "notes" ? "Your notes" : tab === "courses" ? "Your courses" : "Your classes and due dates"} />
+          ) : tab === "courses" ? (
+            <CoursesView v={data.docket} tz={tz} now={now} />
+          ) : tab === "week" ? (
+            <WeekView v={data.docket} tz={tz} now={now} onToggle={setDone} />
+          ) : tab === "work" ? (
+            <WorkView v={data.docket} tz={tz} now={now} onToggle={setDone} />
+          ) : (
+            <NotesView v={data.docket} tz={tz} />
+          )}
+        </main>
+      )}
+
+      {tab === "today" && (
       <main className="main">
         <section className="hero">
           <div>
@@ -126,9 +201,9 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
             </h1>
             <p>
               <strong>
-                {open.length} thing{open.length === 1 ? "" : "s"}
+                {open.length - overdue} thing{open.length - overdue === 1 ? "" : "s"}
               </strong>{" "}
-              due today · {running.length} Claude thread{running.length === 1 ? "" : "s"} active · {data.updates.length} updates
+              due today{overdue ? ` · ${overdue} overdue` : ""} · {running.length} Claude thread{running.length === 1 ? "" : "s"} active · {data.updates.length} updates
             </p>
           </div>
           <div className="hero-actions">
@@ -140,6 +215,8 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
             </a>
           </div>
         </section>
+
+        {data.docket && <ExamsStrip v={data.docket} tz={tz} now={now} />}
 
         <div className="grid">
           <TodayPanel tasks={data.tasks} onToggle={setDone} onAdded={refresh} />
@@ -177,6 +254,7 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
           {data.sources.canvas.toUpperCase()} · CLAUDE {data.sources.claude.toUpperCase()} · REFRESHES EVERY 3 MIN
         </p>
       </main>
+      )}
     </>
   );
 }
@@ -262,7 +340,7 @@ function TodayPanel({
   );
 }
 
-const DAY_START = 8;
+const DAY_START = 6;
 const DAY_END = 23;
 
 function SchedulePanel({ data, now, fmt }: { data: DashboardData; now: Date | null; fmt: Fmt }) {
@@ -271,7 +349,8 @@ function SchedulePanel({ data, now, fmt }: { data: DashboardData; now: Date | nu
     return h + m / 60;
   };
   const pct = (h: number) => ((Math.min(Math.max(h, DAY_START), DAY_END) - DAY_START) / (DAY_END - DAY_START)) * 100;
-  const timed = data.calendar.today.filter((e) => !e.allDay);
+  // Routine blocks (prayer, meals) stay off the timeline; gym stays on.
+  const timed = data.calendar.today.filter((e) => !e.allDay && (!e.routine || e.kind === "gym"));
   const allDay = data.calendar.today.filter((e) => e.allDay);
   const hours = [];
   for (let h = DAY_START; h < DAY_END; h += 2) hours.push(h);
@@ -453,8 +532,16 @@ function UsagePanel({ data, fmt, now }: { data: DashboardData; fmt: Fmt; now: Da
     });
     return `conic-gradient(${stops.join(", ")}${acc < 100 ? `, var(--line) ${acc}% 100%` : ""})`;
   }, [u.byProject]);
+  const limits =
+    u.limits && u.limits.length
+      ? u.limits
+      : [
+          ...(u.session ? [{ label: "5-hour session", ...u.session }] : []),
+          ...(u.weekly ? [{ label: "Weekly limit", ...u.weekly }] : []),
+        ];
+  const history = (u.history ?? []).filter((h) => h.weekly != null);
   const max = Math.max(1, ...u.daily);
-  const week = u.daily.slice(-7).reduce((a, b) => a + b, 0);
+  const threadCount = data.claude.threads.length;
   const resets = (iso?: string) => {
     if (!iso) return "";
     const mins = now ? Math.round((new Date(iso).getTime() - now.getTime()) / 60_000) : 0;
@@ -467,42 +554,29 @@ function UsagePanel({ data, fmt, now }: { data: DashboardData; fmt: Fmt; now: Da
       <div className="panel-head">
         <h2 id="usage-title">05 · USAGE · {u.plan.toUpperCase()}</h2>
         <span className="aside">
-          {u.estimated ? "ESTIMATED" : "REPORTED"} <SourceBadge status={data.sources.claude} />
+          {u.estimated ? "ESTIMATED" : "FROM CLAUDE.AI"} <SourceBadge status={data.sources.claude} />
         </span>
       </div>
       <div className="panel-body">
-        {u.session && (
-          <div className="limit">
+        {limits.map((l) => (
+          <div key={l.label} className="limit">
             <div className="limit-head">
-              <span>5-HOUR SESSION</span>
+              <span>{l.label.toUpperCase()}</span>
               <span>
-                {u.session.pct}%{resets(u.session.resetsAt)}
+                {l.pct}%{l.resetsAt ? resets(l.resetsAt) : l.resets ? ` · RESETS ${l.resets.toUpperCase()}` : ""}
               </span>
             </div>
             <div className="meter">
-              <span style={{ width: `${u.session.pct}%`, background: u.session.pct > 85 ? "var(--amber)" : "var(--blue)" }} />
+              <span style={{ width: `${Math.min(l.pct, 100)}%`, background: l.pct > 85 ? "var(--amber)" : /session/i.test(l.label) ? "var(--blue)" : "var(--silver)" }} />
             </div>
           </div>
-        )}
-        {u.weekly && (
-          <div className="limit">
-            <div className="limit-head">
-              <span>WEEKLY LIMIT</span>
-              <span>
-                {u.weekly.pct}%{resets(u.weekly.resetsAt)}
-              </span>
-            </div>
-            <div className="meter">
-              <span style={{ width: `${u.weekly.pct}%`, background: u.weekly.pct > 85 ? "var(--amber)" : "var(--silver)" }} />
-            </div>
-          </div>
-        )}
+        ))}
         {u.byProject.length > 0 && (
           <div className="donut-wrap">
-            <div className="donut" role="img" aria-label="Share of usage by project this week" style={{ background: donut }}>
+            <div className="donut" role="img" aria-label="Share of Claude threads by project" style={{ background: donut }}>
               <div className="donut-hole">
-                <strong>{week}</strong>
-                <span>MSGS / 7D</span>
+                <strong>{threadCount || u.daily.slice(-7).reduce((a, b) => a + b, 0)}</strong>
+                <span>{threadCount ? "THREADS" : "MSGS / 7D"}</span>
               </div>
             </div>
             <div className="legend">
@@ -516,9 +590,20 @@ function UsagePanel({ data, fmt, now }: { data: DashboardData; fmt: Fmt; now: Da
             </div>
           </div>
         )}
-        {!u.session && !u.weekly && u.byProject.length === 0 && u.daily.length === 0 && (
-          <p className="empty">No usage data yet. It shows up once the Claude feed is connected.</p>
+        {limits.length === 0 && u.byProject.length === 0 && u.daily.length === 0 && (
+          <p className="empty">No usage data yet. It comes in with the next sync, read from your Claude usage page.</p>
         )}
+        {history.length > 1 && (
+          <div className="limit">
+            <span className="row-meta">WEEKLY LIMIT USED · LAST {history.length} READINGS</span>
+            <div className="bars" role="img" aria-label={`Weekly limit used over time, latest ${history.at(-1)!.weekly}%`}>
+              {history.map((h) => (
+                <div key={h.at} title={`${fmt(h.at, { weekday: "short", hour: "numeric" })}: ${h.weekly}%`} style={{ height: `${h.weekly}%` }} />
+              ))}
+            </div>
+          </div>
+        )}
+        {u.readAt && <span className="row-meta">READ FROM CLAUDE.AI · {fmt(u.readAt, { weekday: "short", hour: "numeric", minute: "2-digit" }).toUpperCase()}</span>}
         {u.daily.length > 0 && (
           <div className="limit">
             <span className="row-meta">MESSAGES · LAST {u.daily.length} DAYS</span>

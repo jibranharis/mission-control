@@ -1,6 +1,6 @@
 # Mission Control
 
-A personal command console for one person's day: what Claude is working on, what's due, and what changed, on a single dark screen built to read like a launch console rather than a productivity app.
+A personal command console for one person's day: what Claude is working on, what's due, and what changed, on a single dark screen built to read like a launch console rather than a productivity app. Beyond the main screen, tabs for Courses, Week, Work, Deen (prayer times and the Hijri calendar) and Notes.
 
 ![Mission Control running on sample data](docs/screenshot.png)
 
@@ -53,9 +53,10 @@ Sign in when the URL opens, and copy the printed `GOOGLE_REFRESH_TOKEN` into you
 **Docket.** If your coursework already lands in a Docket artifact, have each Docket sync finish by pushing its items here and reading back what you checked off:
 
 ```bash
-# push: { items, tasks?, courses?, announcements?, grades? }  (DocketSnapshot in lib/sources/docket.ts)
+# push: { items, tasks?, courses?, schedule?, holidays?, notes?, calendar?, deen?, announcements?, claude? }
+#       (DocketSnapshot in lib/sources/docket.ts; `claude` is the push described below)
 curl -X POST https://<your-app>/api/ingest/docket -H "Authorization: Bearer $INGEST_TOKEN" -H "Content-Type: application/json" -d @docket.json
-# pull: items checked off in Mission Control, to mark done in Docket
+# pull: items and tasks checked off in Mission Control, to mark done in Docket
 curl https://<your-app>/api/ingest/docket -H "Authorization: Bearer $INGEST_TOKEN"
 ```
 
@@ -68,7 +69,7 @@ curl -X POST https://<your-app>/api/ingest/claude \
   -d @snapshot.json
 ```
 
-The snapshot shape is `ClaudeSnapshot` in [`lib/types.ts`](lib/types.ts): `usage` (plan, session and weekly percentages, share by project, messages per day), `threads`, `graph` (nodes and parent → child edges), and `updates`. Usage numbers are marked as estimates unless the pusher says otherwise. Canvas snapshots post to `/api/ingest/canvas` in the `CanvasData` shape.
+The push is `ClaudePush` in [`lib/claude.ts`](lib/claude.ts): `usage` (the limit bars from claude.ai's usage page as `limits: [{ label, pct, resets }]`), `threads` (`{ id, title, project, state, step, url }`), and optionally `graph` and `updates`. Without a graph, one is built from the threads, and each push adds to a history of weekly usage. Canvas snapshots post to `/api/ingest/canvas` in the `CanvasData` shape.
 
 ## Stack
 

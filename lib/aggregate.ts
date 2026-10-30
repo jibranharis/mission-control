@@ -4,6 +4,7 @@ import { fetchCalendar, fetchGmail, googleConfigured } from "@/lib/sources/googl
 import { fetchCanvas } from "@/lib/sources/canvas";
 import { getJSON, KEYS } from "@/lib/store";
 import { GYM_SPLIT } from "@/lib/config";
+import { DOCKET_PREFIX, docketCalendar, type DocketView } from "@/lib/sources/docket";
 import { TIMEZONE, dateKey, isToday, startOfDay } from "@/lib/time";
 
 export interface Todo {
@@ -39,8 +40,11 @@ const timeFmt = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TIMEZONE });
 
 export async function buildDashboard(): Promise<DashboardData> {
+  const docket = await getJSON<DocketView | null>(KEYS.docket, null);
+  // Google Calendar directly when it's set up, otherwise the calendar and schedule Docket's sync carried over.
+  const loadCalendar = googleConfigured ? fetchCalendar : async () => (docket ? docketCalendar(docket) : null);
   const [calendar, gmail, canvas, claude, todos, done, notes] = await Promise.all([
-    resolve(googleConfigured, fetchCalendar, emptyCalendar, demoCalendar),
+    resolve(googleConfigured || Boolean(docket), loadCalendar, emptyCalendar, demoCalendar),
     resolve(googleConfigured, fetchGmail, () => [], demoGmail),
     resolve(true, async () => (await fetchCanvas())?.data ?? null, emptyCanvas, demoCanvas),
     resolve(true, () => getJSON<ClaudeSnapshot | null>(KEYS.claude, null), emptyClaude, demoClaude),
@@ -67,7 +71,7 @@ export async function buildDashboard(): Promise<DashboardData> {
     });
   }
   for (const e of calendar.data.today) {
-    if (e.kind === "class") continue;
+    if (e.kind === "class" || e.routine) continue;
     tasks.push({
       id: `cal:${e.id}`,
       title: e.title,
@@ -121,7 +125,15 @@ export async function buildDashboard(): Promise<DashboardData> {
     return { date: key, split, status };
   });
 
+  // Items checked off here show as done right away, before the next sync tells Docket.
+  const docketView: DocketView | null = docket && {
+    ...docket,
+    items: docket.items.map((i) => (done[`${DOCKET_PREFIX}${i.id}`] ? { ...i, status: "done" as const } : i)),
+    tasks: docket.tasks?.map((t) => (done[`${DOCKET_PREFIX}task:${t.id}`] ? { ...t, status: "done" as const } : t)),
+  };
+
   return {
+    docket: docketView,
     generatedAt: new Date().toISOString(),
     timezone: TIMEZONE,
     sources: { calendar: calendar.status, gmail: gmail.status, canvas: canvas.status, claude: claude.status },

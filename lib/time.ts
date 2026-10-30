@@ -6,7 +6,7 @@ export function dateKey(d: Date, tz = TIMEZONE): string {
 }
 
 /** Minutes the zone is ahead of UTC at the given instant. */
-function offsetMinutes(d: Date, tz: string): number {
+export function offsetMinutes(d: Date, tz: string): number {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-US", {
       timeZone: tz,
@@ -34,4 +34,17 @@ export function startOfDay(days = 0, tz = TIMEZONE, now = new Date()): Date {
 
 export function isToday(iso: string, tz = TIMEZONE, now = new Date()): boolean {
   return dateKey(new Date(iso), tz) === dateKey(now, tz);
+}
+
+/** The instant a wall-clock time ("HH:MM") happens on a local date (YYYY-MM-DD). */
+export function atLocal(key: string, hhmm: string, tz = TIMEZONE): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  const [h, min] = hhmm.split(":").map(Number);
+  const guess = new Date(Date.UTC(y, m - 1, d, h, min));
+  return new Date(guess.getTime() - offsetMinutes(guess, tz) * 60000);
+}
+
+/** Monday-first weekday (0 = Monday) of a local date. */
+export function weekdayMon(key: string): number {
+  return (new Date(`${key}T12:00:00Z`).getUTCDay() + 6) % 7;
 }
