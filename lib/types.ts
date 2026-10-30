@@ -23,6 +23,9 @@ export interface CalendarEvent {
   allDay: boolean;
   kind: "class" | "gym" | "focus" | "other";
   url?: string;
+  location?: string;
+  /** Daily routine (prayer, meals, gym) rather than something to act on. */
+  routine?: boolean;
 }
 
 export interface WeekDay {
@@ -96,6 +99,12 @@ export interface ClaudeSnapshot {
     /** Messages per day, oldest first. */
     daily: number[];
     estimated: boolean;
+    /** Every limit bar shown on claude.ai's usage page, e.g. "Current session". */
+    limits?: { label: string; pct: number; resetsAt?: string; resets?: string }[];
+    /** Past readings of the session and weekly limits, oldest first. */
+    history?: { at: string; session?: number; weekly?: number }[];
+    /** When the usage numbers were read. */
+    readAt?: string;
   };
   threads: ClaudeThread[];
   graph: { nodes: GraphNode[]; edges: [string, string][] };
@@ -109,6 +118,7 @@ export interface GymDay {
 }
 
 export interface DashboardData {
+  docket: import("@/lib/sources/docket").DocketView | null;
   generatedAt: string;
   timezone: string;
   sources: Record<"calendar" | "gmail" | "canvas" | "claude", SourceStatus>;

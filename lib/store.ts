@@ -45,4 +45,6 @@ export const KEYS = {
   notes: "mc:notes",
   claude: "mc:claude",
   canvas: "mc:canvas",
+  docket: "mc:docket",
+  usageHistory: "mc:usage-history",
 } as const;
