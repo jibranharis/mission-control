@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import type { DashboardData, SourceStatus, TaskItem, ThreadState, UpdateItem } from "@/lib/types";
 import { CoursesView, DeenView, ExamsStrip, NoDocket, NotesView, WeekView, WorkView } from "./DocketViews";
 import { PRAYERS, PRAYER_ORDER, prayerTimes } from "@/lib/deen";
+import { ClaudeView } from "./ClaudeView";
 
 const ProjectGraph = dynamic(() => import("./ProjectGraph").then((m) => m.ProjectGraph), {
   ssr: false,
@@ -15,6 +16,7 @@ const REFRESH_MS = 3 * 60_000;
 
 const TABS = [
   ["today", "TODAY"],
+  ["claude", "CLAUDE"],
   ["courses", "COURSES"],
   ["week", "WEEK"],
   ["work", "WORK"],
@@ -176,7 +178,9 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
 
       {tab !== "today" && (
         <main className="main">
-          {tab === "deen" ? (
+          {tab === "claude" ? (
+            <ClaudeView data={data} fmt={fmt} now={now} />
+          ) : tab === "deen" ? (
             <DeenView v={data.docket} tz={tz} now={now} />
           ) : !data.docket ? (
             <NoDocket what={tab === "notes" ? "Your notes" : tab === "courses" ? "Your courses" : "Your classes and due dates"} />
@@ -234,7 +238,10 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
           <div className="panel-head">
             <h2 id="graph-title">07 · PROJECT GRAPH</h2>
             <span className="aside">
-              DRAG NODES · CLICK A THREAD TO OPEN IN CLAUDE <SourceBadge status={data.sources.claude} />
+              <a href="#claude" onClick={(e) => (e.preventDefault(), go("claude"))} style={{ color: "var(--blue-soft)" }}>
+                EVERY PROJECT, FLOW CHART AND TOKEN →
+              </a>
+              <SourceBadge status={data.sources.claude} />
             </span>
           </div>
           {data.claude.graph.nodes.length ? (

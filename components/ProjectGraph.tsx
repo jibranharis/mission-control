@@ -13,12 +13,16 @@ import {
 } from "@xyflow/react";
 import type { ClaudeSnapshot, GraphNode } from "@/lib/types";
 
-const POSITIONS_KEY = "mc:graph-positions:v2";
+const POSITIONS_KEY = "mc:graph-positions:v3";
 const KIND_LABEL: Record<GraphNode["kind"], string> = {
   agent: "AGENT",
   project: "PROJECT",
   thread: "THREAD",
   subagent: "SUB-AGENT",
+  branch: "BRANCH",
+  commit: "COMMIT",
+  pr: "PULL REQUEST",
+  session: "SESSION",
 };
 const STATE_COLOR: Record<string, string> = {
   running: "var(--blue)",
@@ -33,7 +37,7 @@ function GraphNodeView({ data }: NodeProps<FlowNode>) {
   return (
     <div
       className={`node ${data.kind}${data.url ? " linked" : ""}`}
-      title={data.url ? "Click to open in Claude" : undefined}
+      title={data.url ? "Click to open" : undefined}
     >
       <Handle type="target" position={Position.Left} />
       <span className="kind">
@@ -43,6 +47,7 @@ function GraphNodeView({ data }: NodeProps<FlowNode>) {
         {KIND_LABEL[data.kind]}
       </span>
       <span>{data.label}</span>
+      {data.meta && <span className="meta">{data.meta}</span>}
       {data.url && <span className="open">OPEN ↗</span>}
       <Handle type="source" position={Position.Right} />
     </div>
@@ -66,8 +71,8 @@ function layout(graph: ClaudeSnapshot["graph"]): Record<string, { x: number; y: 
     seen.add(id);
     const kids = (children.get(id) ?? []).filter((k) => !seen.has(k));
     const ys = kids.map((k) => place(k, depth + 1));
-    const y = ys.length ? (ys[0] + ys[ys.length - 1]) / 2 : row++ * 76;
-    pos[id] = { x: depth * 250, y };
+    const y = ys.length ? (ys[0] + ys[ys.length - 1]) / 2 : row++ * 84;
+    pos[id] = { x: depth * 300, y };
     return y;
   };
   for (const n of graph.nodes) if (!hasParent.has(n.id) && !seen.has(n.id)) place(n.id, 0);
@@ -83,22 +88,21 @@ function readSaved(): Record<string, { x: number; y: number }> {
   }
 }
 
-export function ProjectGraph({ graph }: { graph: ClaudeSnapshot["graph"] }) {
+export function ProjectGraph({ graph, height }: { graph: ClaudeSnapshot["graph"]; height?: number }) {
   const computed = useMemo(() => layout(graph), [graph]);
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   useEffect(() => {
     const saved = readSaved();
-    setNodes((current) => {
-      const live = new Map(current.map((n) => [n.id, n.position]));
-      return graph.nodes.map((n) => ({
+    setNodes(() =>
+      graph.nodes.map((n) => ({
         id: n.id,
         type: "mc",
         data: { ...n },
-        position: live.get(n.id) ?? saved[n.id] ?? computed[n.id],
-      }));
-    });
+        position: saved[n.id] ?? computed[n.id],
+      })),
+    );
     setEdges(
       graph.edges.map(([a, b]) => ({
         id: `${a}->${b}`,
@@ -112,14 +116,19 @@ export function ProjectGraph({ graph }: { graph: ClaudeSnapshot["graph"] }) {
 
   const savePositions = (_: unknown, node: FlowNode) => {
     try {
-      localStorage.setItem(POSITIONS_KEY, JSON.stringify({ ...readSaved(), [node.id]: node.position }));
+      const all = readSaved();
+      all[node.id] = node.position;
+      // Keep the saved layout bounded: forget the oldest positions past a few hundred nodes.
+      const keys = Object.keys(all);
+      for (const k of keys.slice(0, Math.max(0, keys.length - 400))) delete all[k];
+      localStorage.setItem(POSITIONS_KEY, JSON.stringify(all));
     } catch {
       /* storage unavailable */
     }
   };
 
   return (
-    <div className="graph">
+    <div className="graph" style={height ? { height } : undefined}>
       <ReactFlow<FlowNode, Edge>
         nodes={nodes}
         edges={edges}
