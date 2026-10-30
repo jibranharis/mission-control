@@ -160,7 +160,11 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
               DRAG NODES · CLICK A THREAD TO OPEN IN CLAUDE <SourceBadge status={data.sources.claude} />
             </span>
           </div>
-          <ProjectGraph graph={data.claude.graph} />
+          {data.claude.graph.nodes.length ? (
+            <ProjectGraph graph={data.claude.graph} />
+          ) : (
+            <p className="empty">No Claude feed yet. Your projects and threads show up here once it's connected.</p>
+          )}
         </section>
 
         <div className="grid">
@@ -184,7 +188,8 @@ function ago(iso: string, now: Date) {
 
 function SourceBadge({ status }: { status: SourceStatus }) {
   if (status === "live") return <span className="badge live">LIVE</span>;
-  if (status === "error") return <span className="badge error">ERROR · SAMPLE</span>;
+  if (status === "error") return <span className="badge error">ERROR</span>;
+  if (status === "off") return <span className="badge">NOT CONNECTED</span>;
   return <span className="badge">SAMPLE</span>;
 }
 
@@ -300,6 +305,7 @@ function SchedulePanel({ data, now, fmt }: { data: DashboardData; now: Date | nu
           ))}
         </div>
       )}
+      {data.sources.calendar === "off" && <p className="empty">Google Calendar isn&apos;t connected yet.</p>}
       <div className="timeline">
         {hours.map((h) => (
           <div key={h} className="hour" style={{ top: `${pct(h)}%` }}>
@@ -510,6 +516,9 @@ function UsagePanel({ data, fmt, now }: { data: DashboardData; fmt: Fmt; now: Da
             </div>
           </div>
         )}
+        {!u.session && !u.weekly && u.byProject.length === 0 && u.daily.length === 0 && (
+          <p className="empty">No usage data yet. It shows up once the Claude feed is connected.</p>
+        )}
         {u.daily.length > 0 && (
           <div className="limit">
             <span className="row-meta">MESSAGES · LAST {u.daily.length} DAYS</span>
@@ -582,7 +591,7 @@ function TrainingPanel({ data, onToggle }: { data: DashboardData; onToggle: (id:
               <span className="row-meta">{date.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).toUpperCase()}</span>
               <span className="split">{g.split}</span>
               <span className="row-meta" style={{ color }}>
-                {g.status === "rest" ? "·" : g.status.toUpperCase()}
+                {g.status === "rest" ? "·" : g.status === "missed" ? "NOT LOGGED" : g.status.toUpperCase()}
               </span>
             </button>
           );

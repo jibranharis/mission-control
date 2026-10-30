@@ -1,5 +1,5 @@
 import type { ClaudeSnapshot, DashboardData, GymDay, SourceStatus, TaskItem, UpdateItem } from "@/lib/types";
-import { demoCalendar, demoCanvas, demoClaude, demoGmail } from "@/lib/demo";
+import { SAMPLE_DATA, demoCalendar, demoCanvas, demoClaude, demoGmail, emptyCalendar, emptyCanvas, emptyClaude } from "@/lib/demo";
 import { fetchCalendar, fetchGmail, googleConfigured } from "@/lib/sources/google";
 import { fetchCanvas } from "@/lib/sources/canvas";
 import { getJSON, KEYS } from "@/lib/store";
@@ -13,19 +13,25 @@ export interface Todo {
   createdAt: string;
 }
 
-/** Resolves a source, falling back to demo data when it is not set up or fails. */
+/**
+ * Resolves a source. When it isn't set up or fails it comes back empty,
+ * or as sample data if SAMPLE_DATA=1.
+ */
 async function resolve<T>(
   configured: boolean,
   load: () => Promise<T | null>,
+  empty: () => T,
   demo: () => T,
 ): Promise<{ data: T; status: SourceStatus }> {
-  if (!configured) return { data: demo(), status: "demo" };
+  const fallback = (status: SourceStatus) =>
+    SAMPLE_DATA ? { data: demo(), status: status === "off" ? ("demo" as const) : status } : { data: empty(), status };
+  if (!configured) return fallback("off");
   try {
     const data = await load();
-    return data === null ? { data: demo(), status: "demo" } : { data, status: "live" };
+    return data === null ? fallback("off") : { data, status: "live" };
   } catch (err) {
     console.error(err);
-    return { data: demo(), status: "error" };
+    return fallback("error");
   }
 }
 
@@ -34,10 +40,10 @@ const timeFmt = (iso: string) =>
 
 export async function buildDashboard(): Promise<DashboardData> {
   const [calendar, gmail, canvas, claude, todos, done, notes] = await Promise.all([
-    resolve(googleConfigured, fetchCalendar, demoCalendar),
-    resolve(googleConfigured, fetchGmail, demoGmail),
-    resolve(true, async () => (await fetchCanvas())?.data ?? null, demoCanvas),
-    resolve(true, () => getJSON<ClaudeSnapshot | null>(KEYS.claude, null), demoClaude),
+    resolve(googleConfigured, fetchCalendar, emptyCalendar, demoCalendar),
+    resolve(googleConfigured, fetchGmail, () => [], demoGmail),
+    resolve(true, async () => (await fetchCanvas())?.data ?? null, emptyCanvas, demoCanvas),
+    resolve(true, () => getJSON<ClaudeSnapshot | null>(KEYS.claude, null), emptyClaude, demoClaude),
     getJSON<Todo[]>(KEYS.todos, []),
     getJSON<Record<string, string>>(KEYS.done, {}),
     getJSON<string>(KEYS.notes, ""),

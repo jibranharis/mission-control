@@ -15,10 +15,10 @@ A personal command console for one person's day: what Claude is working on, what
 | 05 Usage | Session and weekly limit bars, share of usage by project, and messages per day | Claude snapshot |
 | 06 Updates | New grades, mail, PRs, and finished Claude work from the last two days | Gmail, Canvas, Claude snapshot |
 | 07 Project graph | A draggable flow chart of agent → projects → threads → sub-agents. Clicking a node with a link opens it in Claude | Claude snapshot |
-| 08 Training | This week's split; tap a day to log it | `lib/config.ts` |
+| 08 Training | This week's split; tap a day to log it | `GYM_SPLIT`, see `lib/config.ts` |
 | 09 Notes | A scratchpad that autosaves | Stored in the database |
 
-Any source that isn't connected falls back to sample data and is labelled **SAMPLE**, so the dashboard works the moment you clone it. Data refreshes every three minutes and whenever the tab comes back into view.
+A source that isn't connected stays empty and is labelled **NOT CONNECTED**, so nothing on screen is ever made up. To try the dashboard with sample data instead, set `SAMPLE_DATA=1`. Data refreshes every three minutes and whenever the tab comes back into view.
 
 ## Run it locally
 
