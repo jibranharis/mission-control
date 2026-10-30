@@ -1,7 +1,10 @@
 /**
- * Sample data used for any source that is not connected yet, so the
- * dashboard is fully usable (and screenshot-able) out of the box.
+ * Sample data for trying the dashboard out (and for the README screenshot).
+ * It is only shown when SAMPLE_DATA=1; otherwise a source that isn't
+ * connected stays empty, so nothing on screen is ever made up.
  */
+export const SAMPLE_DATA = process.env.SAMPLE_DATA === "1";
+
 import type { CalendarData, CanvasData, ClaudeSnapshot, UpdateItem } from "@/lib/types";
 import { dateKey, startOfDay } from "@/lib/time";
 
@@ -100,3 +103,18 @@ export function demoClaude(): ClaudeSnapshot {
     ],
   };
 }
+
+export const emptyCalendar = (): CalendarData => ({
+  today: [],
+  week: Array.from({ length: 7 }, (_, i) => ({ date: dateKey(startOfDay(i)), count: 0 })),
+});
+
+export const emptyCanvas = (): CanvasData => ({ assignments: [], grades: [], updates: [] });
+
+export const emptyClaude = (): ClaudeSnapshot => ({
+  generatedAt: new Date().toISOString(),
+  usage: { plan: "Pro", byProject: [], daily: [], estimated: true },
+  threads: [],
+  graph: { nodes: [], edges: [] },
+  updates: [],
+});

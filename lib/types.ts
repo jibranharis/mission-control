@@ -1,4 +1,5 @@
-export type SourceStatus = "live" | "demo" | "error";
+/** live: real data. off: not connected yet. demo: sample data (SAMPLE_DATA=1). */
+export type SourceStatus = "live" | "off" | "demo" | "error";
 
 export type TaskSource = "CANVAS" | "CAL" | "TODO" | "CLAUDE" | "GMAIL";
 
