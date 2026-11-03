@@ -115,6 +115,7 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
 
   const setDone = async (id: string, done: boolean) => {
     // Checking off a re-login says you signed back in; the next run confirms it.
+    if (id === "login-unconfirmed") return go("logins");
     if (id.startsWith("login:")) {
       if (!done) return;
       await fetch("/api/logins", { method: "POST", body: JSON.stringify({ id: id.slice(6), action: "signed_in" }) });
