@@ -1,3 +1,4 @@
+import { PINNED_PROJECTS } from "@/lib/config";
 import type { ClaudeProject, ClaudeSnapshot, ClaudeThread, GraphNode, RepoCard, TokenUsage } from "@/lib/types";
 
 /** What a pusher may send; anything left out keeps what the last push set. */
@@ -100,4 +101,29 @@ export function normalizeClaude(
     projects,
     repos,
   };
+}
+
+/**
+ * Pinned projects (Solo Kitchen) always show, first and under their own name,
+ * even before anything has reported them.
+ */
+export function withPinned(projects: ClaudeProject[], pinned = PINNED_PROJECTS): ClaudeProject[] {
+  const out = projects.map((p) => {
+    const pin = pinned.find((x) => x.repo.toLowerCase() === (p.repo ?? p.id).toLowerCase() || x.name.toLowerCase() === p.name.toLowerCase());
+    return pin ? { ...p, name: pin.name, pinned: true } : p;
+  });
+  for (const pin of pinned) {
+    if (out.some((p) => p.pinned && p.name === pin.name)) continue;
+    out.push({
+      id: pin.repo.toLowerCase(),
+      name: pin.name,
+      repo: pin.repo,
+      url: `https://github.com/${pin.repo}`,
+      pinned: true,
+      placeholder: true,
+      stats: {},
+      graph: { nodes: [{ id: pin.repo.toLowerCase(), kind: "project", label: pin.name, url: `https://github.com/${pin.repo}` }], edges: [] },
+    });
+  }
+  return out.sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
 }
