@@ -15,6 +15,7 @@ Configuration comes from the environment:
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -23,6 +24,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 HOME = os.path.expanduser("~")
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 CLAUDE_DIR = os.path.join(HOME, ".claude", "projects")
 URL = os.environ.get("MC_URL", "").rstrip("/")
 TOKEN = os.environ.get("MC_TOKEN", "")
@@ -132,8 +134,8 @@ def read_transcripts():
                     if t == "user" and msg and not s["title"] and not e.get("isMeta"):
                         c = msg.get("content")
                         text = c if isinstance(c, str) else " ".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text") if isinstance(c, list) else ""
-                        text = " ".join(text.split())
-                        if text and not text.startswith("<"):
+                        text = " ".join(re.sub(r'@"[^"]*"?|@/\S+', " ", text).split())
+                        if text and not text.startswith("<") and re.search(r"[A-Za-z]{2}", text) and not UUID.match(text):
                             s["title"] = text[:80]
                     if t == "assistant" and msg and msg.get("usage"):
                         key = (msg.get("id"), e.get("requestId"))
