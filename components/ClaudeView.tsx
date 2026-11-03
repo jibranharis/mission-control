@@ -73,8 +73,8 @@ export function ClaudeView({ data, fmt, now }: { data: DashboardData; fmt: Fmt; 
 
       <section className="panel" aria-labelledby="map-title">
         <div className="panel-head">
-          <h2 id="map-title">MAP · EVERY PROJECT AND THREAD</h2>
-          <span className="aside">EVERY THREAD · FINISHED ONES DIMMED · CLICK ONE TO OPEN IT</span>
+          <h2 id="map-title">FLOW · EVERY PROJECT AND SESSION</h2>
+          <span className="aside">AGENT → PROJECTS → ROUTE → SESSIONS → OUTPUT · HOVER TO TRACE A PATH · LINE WIDTH = TOKENS</span>
         </div>
         <OverviewGraph projects={projects} threads={c.threads} />
       </section>

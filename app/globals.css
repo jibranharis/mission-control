@@ -534,13 +534,31 @@ a.sankey-card:hover { border-color: var(--line-strong); }
   .waiting-go { order: 3; }
 }
 
-/* Overview map: every project as a column, its threads stacked under it. */
-.graph.overview .node:not(.agent) { width: 250px; white-space: nowrap; }
-.graph.overview .node .label { overflow: hidden; text-overflow: ellipsis; }
-.graph.overview .node .meta { overflow: hidden; text-overflow: ellipsis; }
-.graph.overview .node.agent { min-width: 120px; }
-.graph.overview .node.thread { font-weight: 400; }
-.graph.overview .node.finished { min-height: 0; padding: 6px 12px; color: var(--text-2); border-color: var(--line); background: transparent; font-size: 12px; }
-.graph.overview .node.finished:hover { border-color: var(--line-strong); color: var(--text); }
-.graph.overview .node.branch { font-weight: 400; color: var(--text-2); border-color: var(--line); background: var(--panel); }
-.graph.overview .node.agent .label { color: var(--bg); font-weight: 600; }
+/* Project flowchart: five stages left to right, one lane per project. */
+.graph.flowmap .fm { font-size: 12px; cursor: grab; transition: opacity 150ms, border-color 150ms; }
+.graph.flowmap .fm.dim { opacity: 0.22; }
+.graph.flowmap .fm .kind { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.graph.flowmap .fm .meta { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.06em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.graph.flowmap .fm .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.graph.flowmap .fm.linked { cursor: pointer; }
+.graph.flowmap .fm.stage { cursor: default; border-top: 1px solid var(--line-strong); padding-top: 8px; display: flex; flex-direction: column; gap: 3px; pointer-events: none; }
+.graph.flowmap .stage-n { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.18em; color: var(--text); }
+.graph.flowmap .stage-sub { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--blue-soft); }
+.graph.flowmap .fm.hex { width: 170px; height: 88px; clip-path: polygon(14% 0, 86% 0, 100% 50%, 86% 100%, 14% 100%, 0 50%); background: var(--text); color: var(--bg); display: flex; align-items: center; justify-content: center; }
+.graph.flowmap .fm.hex.hot { background: #ffffff; }
+.graph.flowmap .hex-body { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.graph.flowmap .hex-body strong { font-size: 15px; }
+.graph.flowmap .fm.hex .kind, .graph.flowmap .fm.hex .meta { color: var(--slate); }
+.graph.flowmap .fm.rect { width: 240px; min-height: 64px; padding: 10px 14px; border: 1px solid var(--blue); border-left-width: 3px; background: var(--panel-raised); display: flex; flex-direction: column; gap: 3px; }
+.graph.flowmap .fm.rect strong { font-size: 14px; }
+.graph.flowmap .fm.rect .kind { color: var(--blue-soft); }
+.graph.flowmap .fm.rect.hot { border-color: #7fa6d9; }
+.graph.flowmap .fm.diamond { width: 60px; height: 60px; position: relative; display: flex; align-items: center; justify-content: center; }
+.graph.flowmap .fm.diamond i { position: absolute; inset: 9px; transform: rotate(45deg); border: 1.5px solid; }
+.graph.flowmap .fm.diamond .count { position: relative; font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+.graph.flowmap .fm.session { width: 222px; height: 54px; padding: 6px 10px; border: 1px solid var(--line-strong); background: var(--panel); display: flex; flex-direction: column; justify-content: center; gap: 2px; font-weight: 500; }
+.graph.flowmap .fm.session.finished { border-color: var(--line); background: transparent; color: var(--text-2); font-weight: 400; }
+.graph.flowmap .fm.session.hot, .graph.flowmap .fm.output.hot { border-color: #7fa6d9; color: var(--text); }
+.graph.flowmap .fm.junction { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: var(--bg); }
+.graph.flowmap .fm.output { width: 220px; height: 54px; padding: 6px 14px; border: 1px solid var(--line-strong); border-radius: 25px; background: var(--panel-raised); display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.graph.flowmap .react-flow__minimap { margin: 10px; }
