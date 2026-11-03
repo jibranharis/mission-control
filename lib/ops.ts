@@ -1,6 +1,7 @@
 import { getJSON, setJSON, KEYS } from "@/lib/store";
 import { TIMEZONE, atLocal, dateKey, startOfDay } from "@/lib/time";
 import { googleClientConfigured, listAccounts } from "@/lib/sources/google";
+import { canvasTokenStatus } from "@/lib/sources/canvas";
 
 /**
  * Automations and logins. Every automated job (the Docket syncs, the Mac
@@ -359,6 +360,22 @@ async function googleLogins(now: Date): Promise<Login[]> {
   }));
 }
 
+/** The Canvas access token the dashboard reads Canvas with, checked live. */
+async function canvasLogin(now: Date): Promise<Login> {
+  const c = await canvasTokenStatus().catch(() => null);
+  const base = {
+    id: "canvas-token",
+    name: "Canvas access token",
+    usedBy: ["dashboard"],
+    live: true,
+    loginUrl: "#logins",
+  };
+  if (!c?.set)
+    return { ...base, status: "unchecked", note: "Not set up yet. With it, the dashboard reads Canvas itself and doesn't depend on the Mac browser staying signed in.", howTo: "Use the CANVAS ACCESS TOKEN box below." };
+  if (c.error) return { ...base, status: "expired", checkedAt: c.errorAt, note: c.error, howTo: "Make a new token in Canvas and paste it in the CANVAS ACCESS TOKEN box below." };
+  return { ...base, status: "ok", account: c.user, checkedAt: c.okAt ?? now.toISOString() };
+}
+
 /** The latest scheduled time at or before `now` (and the next one after it). */
 function slots(times: string[], now: Date, tz: string) {
   const all = [-1, 0, 1].flatMap((d) => {
@@ -420,6 +437,8 @@ export async function buildOps(now = new Date(), tz = TIMEZONE): Promise<OpsView
   const loginMap = new Map(DEFAULT_LOGINS.map((l) => [l.id, l]));
   for (const [id, l] of Object.entries(stored)) loginMap.set(id, { ...loginMap.get(id), ...l });
   for (const l of await googleLogins(now)) loginMap.set(l.id, l);
+  const canvasToken = await canvasLogin(now);
+  loginMap.set(canvasToken.id, canvasToken);
   const order: Record<string, number> = { expired: 0, error: 1, stale: 2, pending: 3, unchecked: 4, ok: 5 };
   const logins: LoginView[] = [...loginMap.values()]
     .map((l) => {
