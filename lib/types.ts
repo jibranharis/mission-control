@@ -1,7 +1,7 @@
 /** live: real data. off: not connected yet. demo: sample data (SAMPLE_DATA=1). */
 export type SourceStatus = "live" | "off" | "demo" | "error";
 
-export type TaskSource = "CANVAS" | "CAL" | "TODO" | "CLAUDE" | "GMAIL" | "LOGIN";
+export type TaskSource = "CANVAS" | "CAL" | "TODO" | "CLAUDE" | "GMAIL" | "LOGIN" | "GYM";
 
 export interface TaskItem {
   id: string;
@@ -268,6 +268,8 @@ export interface DashboardData {
   claude: ClaudeSnapshot;
   updates: UpdateItem[];
   gym: GymDay[];
+  /** The split, the weekdays you lift and the workout log. */
+  gymPlan: import("@/lib/gym").GymData;
   notes: string;
   /** Automations, their runs, and the logins they depend on. */
   ops: import("@/lib/ops").OpsView;
