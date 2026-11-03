@@ -1,5 +1,6 @@
 import { getJSON, setJSON, KEYS } from "@/lib/store";
 import { TIMEZONE, atLocal, dateKey, startOfDay } from "@/lib/time";
+import { googleClientConfigured, listAccounts } from "@/lib/sources/google";
 
 /**
  * Automations and logins. Every automated job (the Docket syncs, the Mac
@@ -64,6 +65,8 @@ export interface Login {
   /** Plain steps for signing back in. */
   howTo?: string;
   usedBy: string[];
+  /** Read live by the dashboard itself (e.g. Google accounts), so there's nothing to confirm by hand. */
+  live?: boolean;
 }
 
 export type Health = "ok" | "failing" | "missed" | "stale" | "never";
@@ -324,6 +327,38 @@ export async function updateLogin(id: string, action: "signed_in" | "remove"): P
   return true;
 }
 
+/** Google accounts connected to the dashboard (Gmail and Calendar), read live. */
+async function googleLogins(now: Date): Promise<Login[]> {
+  const accounts = await listAccounts().catch(() => []);
+  const checkedAt = now.toISOString();
+  const usedBy = ["inbox"];
+  if (!accounts.length)
+    return [
+      {
+        id: "google",
+        name: "Google (Gmail + Calendar)",
+        status: "unchecked",
+        usedBy,
+        live: true,
+        loginUrl: googleClientConfigured ? "/api/google/connect" : undefined,
+        note: googleClientConfigured ? "No Google account is connected to Mission Control yet." : "Google sign-in isn't set up on the server yet.",
+        howTo: googleClientConfigured ? "Press CONNECT, pick your account and allow access. Do it once for your personal Gmail and once for UC Davis." : undefined,
+      },
+    ];
+  return accounts.map((a) => ({
+    id: `google-${a.email.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
+    name: `Google · ${a.label}`,
+    account: a.email === "primary" ? undefined : a.email,
+    status: a.needsReconnect ? ("expired" as const) : ("ok" as const),
+    checkedAt,
+    usedBy,
+    live: true,
+    note: a.needsReconnect,
+    loginUrl: `/api/google/connect${a.email === "primary" ? "" : `?hint=${encodeURIComponent(a.email)}`}`,
+    howTo: "Press CONNECT, pick this account and allow access again.",
+  }));
+}
+
 /** The latest scheduled time at or before `now` (and the next one after it). */
 function slots(times: string[], now: Date, tz: string) {
   const all = [-1, 0, 1].flatMap((d) => {
@@ -384,11 +419,13 @@ export async function buildOps(now = new Date(), tz = TIMEZONE): Promise<OpsView
 
   const loginMap = new Map(DEFAULT_LOGINS.map((l) => [l.id, l]));
   for (const [id, l] of Object.entries(stored)) loginMap.set(id, { ...loginMap.get(id), ...l });
+  for (const l of await googleLogins(now)) loginMap.set(l.id, l);
   const order: Record<string, number> = { expired: 0, error: 1, stale: 2, pending: 3, unchecked: 4, ok: 5 };
   const logins: LoginView[] = [...loginMap.values()]
     .map((l) => {
       const old = l.status === "ok" && l.checkedAt && now.getTime() - Date.parse(l.checkedAt) > STALE_LOGIN_H * 3600000;
-      return { ...l, shown: old ? ("stale" as const) : l.status, needsYou: l.status === "expired" || l.status === "error" };
+      // Anything not confirmed signed in counts as not logged in until a check says otherwise.
+      return { ...l, shown: old ? ("stale" as const) : l.status, needsYou: l.status === "expired" || l.status === "error" || l.status === "unchecked" };
     })
     .sort((a, b) => order[a.shown] - order[b.shown] || a.name.localeCompare(b.name));
 

@@ -138,7 +138,7 @@ export async function buildDashboard(): Promise<DashboardData> {
     });
   }
   // Sign-ins that broke come first: every automation behind them is stuck until they're redone.
-  for (const l of ops.logins.filter((l) => l.needsYou)) {
+  for (const l of ops.logins.filter((l) => l.needsYou && l.status !== "unchecked")) {
     tasks.push({
       id: `login:${l.id}`,
       title: `Sign back in to ${l.name}`,
@@ -147,6 +147,19 @@ export async function buildDashboard(): Promise<DashboardData> {
       dueToday: true,
       done: false,
       url: l.loginUrl,
+    });
+  }
+  // Accounts no check has confirmed yet: one to-do for all of them (each is listed on the Logins tab).
+  const unconfirmed = ops.logins.filter((l) => l.status === "unchecked");
+  if (unconfirmed.length) {
+    tasks.push({
+      id: "login-unconfirmed",
+      title: unconfirmed.length === 1 ? `Log in to ${unconfirmed[0].name}` : `Log in to ${unconfirmed.length} accounts`,
+      meta: `NOT LOGGED IN · ${unconfirmed.map((l) => l.name.replace(/ \(.*\)$/, "")).join(", ").toUpperCase()}`,
+      source: "LOGIN",
+      dueToday: true,
+      done: false,
+      url: "#logins",
     });
   }
   const first = (t: TaskItem) => (t.source === "LOGIN" ? 0 : 1);

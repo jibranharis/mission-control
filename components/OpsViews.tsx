@@ -26,7 +26,7 @@ const LOGIN: Record<LoginView["shown"], { label: string; color: string }> = {
   error: { label: "CHECK FAILED", color: "var(--amber)" },
   stale: { label: "NOT CHECKED LATELY", color: "var(--muted)" },
   pending: { label: "CONFIRMING", color: "var(--blue-soft)" },
-  unchecked: { label: "NOT CHECKED YET", color: "var(--muted)" },
+  unchecked: { label: "NOT LOGGED IN", color: "var(--red)" },
 };
 
 function ago(iso: string | undefined, now: Date | null) {
@@ -106,10 +106,10 @@ function LoginRow({ l, now, onChanged, compact, names = {} }: { l: LoginView; no
         </span>
         {l.loginUrl && (
           <a className="btn btn-sm" href={l.loginUrl} target="_blank" rel="noreferrer">
-            OPEN SITE
+            {l.live ? (l.status === "ok" ? "RECONNECT" : "CONNECT") : "OPEN SITE"}
           </a>
         )}
-        {(l.needsYou || (!compact && l.shown === "stale")) && (
+        {!l.live && (l.needsYou || (!compact && l.shown === "stale")) && (
           <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => act("signed_in")}>
             I SIGNED IN
           </button>
