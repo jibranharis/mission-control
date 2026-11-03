@@ -43,10 +43,11 @@ function collectorSummary(b: Record<string, unknown>) {
  *   POST /api/ingest/canvas  body: CanvasData
  *   POST /api/ingest/run     body: RunReport (see app/api/ingest/run/route.ts)
  * Each Claude and Docket push is also logged as a run on the Automations page.
- * Authenticated with `Authorization: Bearer $INGEST_TOKEN`.
+ * Authenticated with `Authorization: Bearer $INGEST_TOKEN`, or with the
+ * dashboard session cookie when the request comes from a signed-in browser.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ source: string }> }) {
-  if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await authorized(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { source } = await params;
 
   const body = await req.json().catch(() => null);
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sou
  * Mission Control, so the Docket sync can mark them done there too.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ source: string }> }) {
-  if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await authorized(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { source } = await params;
   if (source !== "docket") return NextResponse.json({ error: "unknown source" }, { status: 404 });
   const done = await getJSON<Record<string, string>>(KEYS.done, {});

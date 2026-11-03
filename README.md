@@ -56,7 +56,7 @@ Set `ANTHROPIC_API_KEY` and Claude reads each new email once to decide whether i
 
 **Canvas.** In Canvas, open **Account → Settings → New Access Token**, then set `CANVAS_BASE_URL` (for example `https://canvas.ucdavis.edu`) and `CANVAS_TOKEN`. If you'd rather keep using a scraper, leave those blank and have it push to the ingest endpoint instead.
 
-**Docket.** If your coursework already lands in a Docket artifact, have each Docket sync finish by pushing its items here and reading back what you checked off:
+**Docket.** If your coursework already lands in a Docket artifact, have each Docket sync finish by pushing its items here and reading back what you checked off. A browser that is signed in to the dashboard can do this with a plain same-origin `fetch('/api/ingest/docket', ...)` and no token at all; anything else sends the ingest token:
 
 ```bash
 # push: { items, tasks?, courses?, schedule?, holidays?, notes?, calendar?, deen?, announcements?, claude? }
