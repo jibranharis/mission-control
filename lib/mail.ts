@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { MailAlert, MailEvent, MailState } from "@/lib/types";
 import { getJSON, setJSON } from "@/lib/store";
 import { TIMEZONE, atLocal, dateKey } from "@/lib/time";
-import { google, listAccounts, type GoogleAccount } from "@/lib/sources/google";
+import { google, listAccounts, noteProblem, type GoogleAccount } from "@/lib/sources/google";
 
 /**
  * Reads the inbox of every connected Google account, decides what matters,
@@ -312,19 +312,33 @@ export async function fetchMail(): Promise<MailAlert[] | null> {
   const live = new Set<string>();
   const results = await Promise.allSettled(
     accounts.map(async (a) => {
-      const list = await google<{ messages?: { id: string }[] }>(a, "/gmail/v1/users/me/messages", {
-        params: { q: QUERY, maxResults: "30" },
-      });
-      for (const { id } of list.messages ?? []) {
-        const key = `${a.email}:${id}`;
-        live.add(key);
-        if (records[key]) continue;
-        try {
-          records[key] = await newRecord(a, id);
-          changed = true;
-        } catch (err) {
-          console.error(err);
+      try {
+        const list = await google<{ messages?: { id: string }[] }>(a, "/gmail/v1/users/me/messages", {
+          params: { q: QUERY, maxResults: "30" },
+        });
+        const fresh: string[] = [];
+        for (const { id } of list.messages ?? []) {
+          const key = `${a.email}:${id}`;
+          live.add(key);
+          if (!records[key]) fresh.push(id);
         }
+        // New mail is read in parallel, a few at a time, so the first sync stays quick.
+        for (let i = 0; i < fresh.length; i += 6) {
+          await Promise.all(
+            fresh.slice(i, i + 6).map(async (id) => {
+              try {
+                records[`${a.email}:${id}`] = await newRecord(a, id);
+                changed = true;
+              } catch (err) {
+                console.error(err);
+              }
+            }),
+          );
+        }
+        noteProblem(a.email, "mail");
+      } catch (err) {
+        noteProblem(a.email, "mail", err);
+        throw err;
       }
     }),
   );

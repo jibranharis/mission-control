@@ -75,6 +75,8 @@ export interface GoogleAccountStatus {
   label: string;
   status: "ok" | "reconnect";
   detail?: string;
+  /** What went wrong on the last read of this account's mail or calendar, in plain words. */
+  problem?: string;
 }
 
 /** A calendar item found in an email, ready to add with one click. */

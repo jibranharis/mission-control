@@ -180,6 +180,7 @@ input[type="checkbox"] { accent-color: var(--blue); width: 16px; height: 16px; m
 .alerts-more { padding: 12px 18px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--blue-soft); }
 .acct { align-items: center; }
 .acct .live-dot { flex: 0 0 auto; }
+.acct-problem { font-size: 13px; color: var(--amber); line-height: 1.4; }
 .acct-add { display: inline-flex; align-items: center; justify-content: center; }
 
 /* Canvas */

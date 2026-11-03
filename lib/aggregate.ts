@@ -60,7 +60,7 @@ export async function buildDashboard(): Promise<DashboardData> {
         return calendarData([...(g.events ?? []), ...docketBlocks(docket)].sort((a, b) => a.start.localeCompare(b.start)));
       }
     : async () => (docket ? docketCalendar(docket) : null);
-  const [calendar, gmail, canvas, claude, todos, done, notes, github, accounts, ops] = await Promise.all([
+  const [calendar, gmail, canvas, claude, todos, done, notes, github, ops] = await Promise.all([
     resolve(googleConfigured || Boolean(docket), loadCalendar, emptyCalendar, demoCalendar),
     resolve(googleConfigured, fetchMail, () => [], () => []),
     resolve(true, async () => (await fetchCanvas())?.data ?? null, emptyCanvas, demoCanvas),
@@ -69,9 +69,10 @@ export async function buildDashboard(): Promise<DashboardData> {
     getJSON<Record<string, string>>(KEYS.done, {}),
     getJSON<string>(KEYS.notes, ""),
     fetchGitHub(),
-    accountStatuses(),
     buildOps(),
   ]);
+  // Read after the syncs so each account carries what went wrong just now.
+  const accounts = await accountStatuses();
 
   // GitHub fills in repositories and projects the Mac collector hasn't sent; pushed ones win.
   if (github) {
