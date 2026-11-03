@@ -1,13 +1,15 @@
 import type { ClaudeSnapshot, DashboardData, GymDay, SourceStatus, TaskItem, UpdateItem } from "@/lib/types";
-import { SAMPLE_DATA, demoCalendar, demoCanvas, demoClaude, demoGmail, emptyCalendar, emptyCanvas, emptyClaude } from "@/lib/demo";
-import { fetchCalendar, fetchGmail, googleConfigured } from "@/lib/sources/google";
+import { SAMPLE_DATA, demoCalendar, demoCanvas, demoClaude, demoMail, emptyCalendar, emptyCanvas, emptyClaude } from "@/lib/demo";
+import { accountStatuses, calendarData, fetchCalendar, googleClientConfigured, listAccounts } from "@/lib/sources/google";
+import { claudeConfigured, fetchMail } from "@/lib/mail";
 import { fetchCanvas } from "@/lib/sources/canvas";
 import { fetchGitHub } from "@/lib/sources/github";
 import { mergeProjects } from "@/lib/claude";
 import { getJSON, KEYS } from "@/lib/store";
-import { GYM_SPLIT } from "@/lib/config";
-import { DOCKET_PREFIX, docketCalendar, type DocketView } from "@/lib/sources/docket";
+import { GYM_KEY, normalizeGym, planGym, type GymData } from "@/lib/gym";
+import { DOCKET_PREFIX, docketBlocks, docketCalendar, type DocketView } from "@/lib/sources/docket";
 import { TIMEZONE, dateKey, isToday, startOfDay } from "@/lib/time";
+import { buildOps } from "@/lib/ops";
 
 export interface Todo {
   id: string;
@@ -43,18 +45,34 @@ const timeFmt = (iso: string) =>
 
 export async function buildDashboard(): Promise<DashboardData> {
   const docket = await getJSON<DocketView | null>(KEYS.docket, null);
-  // Google Calendar directly when it's set up, otherwise the calendar and schedule Docket's sync carried over.
-  const loadCalendar = googleConfigured ? fetchCalendar : async () => (docket ? docketCalendar(docket) : null);
-  const [calendar, gmail, canvas, claude, todos, done, notes, github] = await Promise.all([
+  const googleConfigured = googleClientConfigured && (await listAccounts()).some((a) => !a.needsReconnect);
+  // Google Calendar directly when an account is connected (with Docket's class schedule on top),
+  // otherwise the calendar and schedule Docket's sync carried over.
+  const loadCalendar = googleConfigured
+    ? async () => {
+        const g = await fetchCalendar().catch((err) => {
+          if (!docket) throw err;
+          console.error(err);
+          return null;
+        });
+        if (!docket) return g;
+        if (!g) return docketCalendar(docket);
+        return calendarData([...(g.events ?? []), ...docketBlocks(docket)].sort((a, b) => a.start.localeCompare(b.start)));
+      }
+    : async () => (docket ? docketCalendar(docket) : null);
+  const [calendar, gmail, canvas, claude, todos, done, notes, github, ops] = await Promise.all([
     resolve(googleConfigured || Boolean(docket), loadCalendar, emptyCalendar, demoCalendar),
-    resolve(googleConfigured, fetchGmail, () => [], demoGmail),
+    resolve(googleConfigured, fetchMail, () => [], () => []),
     resolve(true, async () => (await fetchCanvas())?.data ?? null, emptyCanvas, demoCanvas),
     resolve(true, () => getJSON<ClaudeSnapshot | null>(KEYS.claude, null), emptyClaude, demoClaude),
     getJSON<Todo[]>(KEYS.todos, []),
     getJSON<Record<string, string>>(KEYS.done, {}),
     getJSON<string>(KEYS.notes, ""),
     fetchGitHub(),
+    buildOps(),
   ]);
+  // Read after the syncs so each account carries what went wrong just now.
+  const accounts = await accountStatuses();
 
   // GitHub fills in repositories and projects the Mac collector hasn't sent; pushed ones win.
   if (github) {
@@ -120,22 +138,58 @@ export async function buildDashboard(): Promise<DashboardData> {
       done: isDone,
     });
   }
-  tasks.sort((a, b) => Number(a.done) - Number(b.done) || (a.due ?? "9").localeCompare(b.due ?? "9"));
+  // Sign-ins that broke come first: every automation behind them is stuck until they're redone.
+  for (const l of ops.logins.filter((l) => l.needsYou && l.status !== "unchecked")) {
+    tasks.push({
+      id: `login:${l.id}`,
+      title: `Sign back in to ${l.name}`,
+      meta: `RE-LOGIN NEEDED${l.usedBy.length ? ` · BLOCKS ${l.usedBy.length} AUTOMATION${l.usedBy.length > 1 ? "S" : ""}` : ""}`,
+      source: "LOGIN",
+      dueToday: true,
+      done: false,
+      url: l.loginUrl,
+    });
+  }
+  // Accounts no check has confirmed yet: one to-do for all of them (each is listed on the Logins tab).
+  const unconfirmed = ops.logins.filter((l) => l.status === "unchecked");
+  if (unconfirmed.length) {
+    tasks.push({
+      id: "login-unconfirmed",
+      title: unconfirmed.length === 1 ? `Log in to ${unconfirmed[0].name}` : `Log in to ${unconfirmed.length} accounts`,
+      meta: `NOT LOGGED IN · ${unconfirmed.map((l) => l.name.replace(/ \(.*\)$/, "")).join(", ").toUpperCase()}`,
+      source: "LOGIN",
+      dueToday: true,
+      done: false,
+      url: "#logins",
+    });
+  }
+  const gymPlan = normalizeGym(await getJSON<Partial<GymData> | null>(GYM_KEY, null));
+  const todayKey = dateKey(startOfDay(0));
+  const gym: GymDay[] = planGym(gymPlan, dateKey(startOfDay(-1)), dateKey(startOfDay(5)), todayKey).map((p) => ({
+    date: p.date,
+    split: p.day?.name ?? (p.status === "rest" ? "Rest" : "—"),
+    status: p.status,
+  }));
 
-  const updates: UpdateItem[] = [...canvas.data.updates, ...gmail.data, ...claude.data.updates]
+  // Today's lift, from the split's rotation. Checking it off logs the workout.
+  const lift = gym.find((g) => g.date === todayKey);
+  if (lift && (lift.status === "today" || lift.status === "done")) {
+    tasks.push({
+      id: `gym:${todayKey}`,
+      title: `Lift: ${lift.split}`,
+      meta: gymPlan.split.find((d) => d.name === lift.split)?.focus.toUpperCase() ?? "GYM",
+      source: "GYM",
+      dueToday: true,
+      done: lift.status === "done",
+    });
+  }
+  const first = (t: TaskItem) => (t.source === "LOGIN" ? 0 : 1);
+  tasks.sort((a, b) => Number(a.done) - Number(b.done) || first(a) - first(b) || (a.due ?? "9").localeCompare(b.due ?? "9"));
+
+  const updates: UpdateItem[] = [...canvas.data.updates, ...claude.data.updates]
     .filter((u) => Date.now() - new Date(u.at).getTime() < 2 * 86_400_000)
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 12);
-
-  const gym: GymDay[] = Array.from({ length: 7 }, (_, i) => {
-    const day = startOfDay(i - 1);
-    const key = dateKey(day);
-    const weekday = new Date(`${key}T12:00:00Z`).getUTCDay();
-    const split = GYM_SPLIT[weekday];
-    const status: GymDay["status"] =
-      split === "Rest" ? "rest" : done[`gym:${key}`] ? "done" : i === 1 ? "today" : i === 0 ? "missed" : "planned";
-    return { date: key, split, status };
-  });
 
   // Items checked off here show as done right away, before the next sync tells Docket.
   const docketView: DocketView | null = docket && {
@@ -151,10 +205,16 @@ export async function buildDashboard(): Promise<DashboardData> {
     sources: { calendar: calendar.status, gmail: gmail.status, canvas: canvas.status, claude: claude.status },
     tasks,
     calendar: calendar.data,
+    mail:
+      SAMPLE_DATA && !accounts.length
+        ? demoMail()
+        : { alerts: gmail.data, accounts, canConnect: googleClientConfigured, claude: claudeConfigured },
     canvas: canvas.data,
     claude: claude.data,
     updates,
     gym,
+    gymPlan,
     notes,
+    ops,
   };
 }

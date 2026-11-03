@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DOCKET_PREFIX, eventsOn, type DocketItem, type DocketView } from "@/lib/sources/docket";
 import { PRAYERS, PRAYER_ORDER, hijri, methodName, prayerTimes, upcomingOccasions } from "@/lib/deen";
 import { PrayerLog } from "./PrayerLog";
+import { planGym, type GymData } from "@/lib/gym";
 
 type Toggle = (id: string, done: boolean) => void;
 
@@ -53,25 +54,16 @@ export function NoDocket({ what }: { what: string }) {
   return (
     <section className="panel">
       <p className="empty">
-        {what} come from Docket. They show up here after Docket&apos;s next sync sends them over (6 AM, 12 PM and 9:30 PM).
+        {what} show up here after the next school sync (6 AM, 12 PM and 9:30 PM).
       </p>
     </section>
-  );
-}
-
-function OpenInDocket({ v, view }: { v: DocketView; view: string }) {
-  if (!v.url) return null;
-  return (
-    <a className="btn" href={`${v.url}#${view}`} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center" }}>
-      OPEN IN DOCKET ↗
-    </a>
   );
 }
 
 function SyncedNote({ v, tz }: { v: DocketView; tz: string }) {
   const { f } = useFmt(tz);
   const at = v.syncedAt ?? v.receivedAt;
-  return <span className="row-meta">FROM DOCKET · SYNCED {f(at, { weekday: "short", hour: "numeric", minute: "2-digit" }).toUpperCase()}</span>;
+  return <span className="row-meta">SCHOOL SYNC · {f(at, { weekday: "short", hour: "numeric", minute: "2-digit" }).toUpperCase()}</span>;
 }
 
 /* ---------- Exams ahead (shown on Today) ---------- */
@@ -121,7 +113,6 @@ export function CoursesView({ v, tz, now }: { v: DocketView; tz: string; now: Da
     <>
       <div className="view-head">
         <h1>Courses</h1>
-        <OpenInDocket v={v} view="courses" />
       </div>
       <div className="grid">
         {Object.entries(v.courses).map(([id, c]) => {
@@ -215,7 +206,7 @@ export function CoursesView({ v, tz, now }: { v: DocketView; tz: string; now: Da
 
 /* ---------- Week ---------- */
 
-export function WeekView({ v, tz, now, onToggle }: { v: DocketView; tz: string; now: Date | null; onToggle: Toggle }) {
+export function WeekView({ v, tz, now, onToggle, gym }: { v: DocketView; tz: string; now: Date | null; onToggle: Toggle; gym?: GymData }) {
   const { f, key, time } = useFmt(tz);
   const [offset, setOffset] = useState(0);
   const [routine, setRoutine] = useState(false);
@@ -223,6 +214,7 @@ export function WeekView({ v, tz, now, onToggle }: { v: DocketView; tz: string; 
   const monday = addDays(today, -((new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7) + offset * 7);
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const work = allWork(v);
+  const lifts = useMemo(() => new Map((gym ? planGym(gym, days[0], days[6], today) : []).map((p) => [p.date, p])), [gym, days[0], days[6], today]);
 
   return (
     <>
@@ -259,6 +251,19 @@ export function WeekView({ v, tz, now, onToggle }: { v: DocketView; tz: string; 
                   {h.title}
                 </div>
               ))}
+              {(() => {
+                const l = lifts.get(k);
+                if (!l || !l.day || l.status === "rest") return null;
+                return (
+                  <label className={`ev due${l.status === "done" ? " done" : ""}`} style={{ borderLeftColor: "var(--teal)" }}>
+                    <span className="ev-title">
+                      <input type="checkbox" checked={l.status === "done"} onChange={(e) => onToggle(`gym:${k}`, e.target.checked)} />
+                      {l.day.name}
+                    </span>
+                    <span className="row-meta">LIFT · {l.day.focus.toUpperCase()}</span>
+                  </label>
+                );
+              })()}
               {events.map((e) => (
                 <div key={e.id} className="ev" style={{ borderLeftColor: e.kind === "class" ? "var(--blue-soft)" : e.kind === "gym" ? "var(--teal)" : "var(--silver)" }}>
                   <span className="ev-title">{e.title}</span>
@@ -279,13 +284,13 @@ export function WeekView({ v, tz, now, onToggle }: { v: DocketView; tz: string; 
                   </span>
                 </label>
               ))}
-              {!hol.length && !events.length && !due.length && <p className="day-empty">CLEAR</p>}
+              {!hol.length && !events.length && !due.length && !lifts.get(k)?.day && <p className="day-empty">CLEAR</p>}
             </section>
           );
         })}
       </div>
       <p className="footnote">
-        WEEK OF {f(`${monday}T12:00:00Z`, { month: "long", day: "numeric" }).toUpperCase()} · CLASSES, CALENDAR AND DUE DATES FROM DOCKET
+        WEEK OF {f(`${monday}T12:00:00Z`, { month: "long", day: "numeric" }).toUpperCase()} · CLASSES, CALENDAR, LIFTS AND DUE DATES
       </p>
     </>
   );
@@ -313,8 +318,7 @@ export function WorkView({ v, tz, now, onToggle }: { v: DocketView; tz: string; 
   return (
     <>
       <div className="view-head">
-        <h1>Work</h1>
-        <OpenInDocket v={v} view="work" />
+        <h1>Schoolwork</h1>
       </div>
       <div className="filters">
         {[["all", "ALL"], ...Object.entries(v.courses).map(([id, c]) => [id, c.code]), ["life", "LIFE"]].map(([id, label]) => (
@@ -393,7 +397,6 @@ export function DeenView({ v, tz, now }: { v: DocketView | null; tz: string; now
     <>
       <div className="view-head">
         <h1>Deen</h1>
-        {v && <OpenInDocket v={v} view="deen" />}
       </div>
       <PrayerLog today={today} tz={tz} method={method} now={now} time={time} />
       <div className="grid">
@@ -463,7 +466,6 @@ export function NotesView({ v, tz }: { v: DocketView; tz: string }) {
     <>
       <div className="view-head">
         <h1>Notes</h1>
-        <OpenInDocket v={v} view="notes" />
       </div>
       <div className="filters">
         <input className="search" placeholder="Search notes..." value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search notes" />

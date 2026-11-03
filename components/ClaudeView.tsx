@@ -160,7 +160,7 @@ function LimitsPanel({ data, fmt, now }: { data: DashboardData; fmt: Fmt; now: D
         <span className="aside">{u.readAt ? `READ ${fmt(u.readAt, { weekday: "short", hour: "numeric", minute: "2-digit" }).toUpperCase()}` : "FROM CLAUDE.AI"}</span>
       </div>
       <div className="panel-body">
-        {limits.length === 0 && <p className="empty" style={{ padding: 0 }}>Not read yet. The Docket sync reads your claude.ai usage page three times a day.</p>}
+        {limits.length === 0 && <p className="empty" style={{ padding: 0 }}>Not read yet. The school sync reads your claude.ai usage page three times a day.</p>}
         {limits.map((l) => (
           <div key={l.label} className="limit">
             <div className="limit-head">

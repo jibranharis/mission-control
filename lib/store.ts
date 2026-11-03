@@ -48,4 +48,7 @@ export const KEYS = {
   docket: "mc:docket",
   usageHistory: "mc:usage-history",
   github: "mc:github",
+  runs: "mc:runs",
+  automations: "mc:automations",
+  logins: "mc:logins",
 } as const;

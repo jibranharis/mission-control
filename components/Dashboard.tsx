@@ -5,7 +5,13 @@ import dynamic from "next/dynamic";
 import type { DashboardData, SourceStatus, TaskItem, ThreadState, UpdateItem } from "@/lib/types";
 import { CoursesView, DeenView, ExamsStrip, NoDocket, NotesView, WeekView, WorkView } from "./DocketViews";
 import { PRAYERS, PRAYER_ORDER, prayerTimes } from "@/lib/deen";
+import { planGym } from "@/lib/gym";
 import { ClaudeView } from "./ClaudeView";
+import { SchedulePanel } from "./CalendarPanel";
+import { AlertsPanel, InboxView, ReconnectBanner } from "./InboxView";
+import { AutomationsView, LoginsView, OpsAlert } from "./OpsViews";
+import { PlanView, ProjectsView, StudyView } from "./LifeViews";
+import { GymView } from "./GymView";
 
 const ProjectGraph = dynamic(() => import("./ProjectGraph").then((m) => m.ProjectGraph), {
   ssr: false,
@@ -16,12 +22,19 @@ const REFRESH_MS = 3 * 60_000;
 
 const TABS = [
   ["today", "TODAY"],
+  ["inbox", "INBOX"],
   ["claude", "CLAUDE"],
+  ["projects", "PROJECTS"],
+  ["plan", "PLAN"],
   ["courses", "COURSES"],
   ["week", "WEEK"],
-  ["work", "WORK"],
+  ["work", "SCHOOLWORK"],
+  ["study", "STUDY"],
+  ["gym", "GYM"],
   ["deen", "DEEN"],
   ["notes", "NOTES"],
+  ["automations", "AUTOMATIONS"],
+  ["logins", "LOGINS"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -32,6 +45,8 @@ const SOURCE_COLOR: Record<TaskItem["source"] | UpdateItem["source"], string> = 
   CLAUDE: "var(--teal)",
   GMAIL: "var(--blue-soft)",
   GITHUB: "var(--silver)",
+  LOGIN: "var(--red)",
+  GYM: "var(--teal)",
 };
 
 const STATE: Record<ThreadState, { label: string; color: string }> = {
@@ -42,7 +57,6 @@ const STATE: Record<ThreadState, { label: string; color: string }> = {
   idle: { label: "IDLE", color: "var(--muted)" },
 };
 
-const EVENT_COLOR = { class: "var(--blue-soft)", gym: "var(--teal)", focus: "var(--silver)", other: "var(--amber)" };
 const SPLIT_COLORS = ["var(--blue)", "var(--silver)", "var(--amber)", "var(--teal)", "var(--slate)"];
 
 function useNow(intervalMs = 1000) {
@@ -104,10 +118,35 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
   }, [refresh]);
 
   const setDone = async (id: string, done: boolean) => {
+    // Checking off a re-login says you signed back in; the next run confirms it.
+    if (id === "login-unconfirmed") return go("logins");
+    if (id.startsWith("login:")) {
+      if (!done) return;
+      await fetch("/api/logins", { method: "POST", body: JSON.stringify({ id: id.slice(6), action: "signed_in" }) });
+      return refresh();
+    }
+    // Workouts go to the gym log, which keeps the split's rotation in order.
+    if (id.startsWith("gym:")) {
+      const date = id.slice(4);
+      const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      const planned = planGym(data.gymPlan, date, date, todayKey)[0]?.day?.id;
+      setData((d) => ({
+        ...d,
+        tasks: d.tasks.map((t) => (t.id === id ? { ...t, done } : t)),
+        gym: d.gym.map((g) => (g.date === date ? { ...g, status: done ? "done" : "planned" } : g)),
+        gymPlan: {
+          ...d.gymPlan,
+          log: [...d.gymPlan.log.filter((l) => l.date !== date), ...(done && planned ? [{ date, dayId: planned }] : [])].sort((a, b) =>
+            a.date.localeCompare(b.date),
+          ),
+        },
+      }));
+      await fetch("/api/gym", { method: "POST", body: JSON.stringify({ date, done, dayId: planned }) });
+      return refresh();
+    }
     setData((d) => ({
       ...d,
       tasks: d.tasks.map((t) => (t.id === id ? { ...t, done } : t)),
-      gym: d.gym.map((g) => (`gym:${g.date}` === id ? { ...g, status: done ? "done" : "planned" } : g)),
       docket: d.docket && {
         ...d.docket,
         items: d.docket.items.map((i) => (`docket:${i.id}` === id ? { ...i, status: done ? "done" : "todo" } : i)),
@@ -123,6 +162,7 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
   const overdue = open.filter((t) => t.meta === "OVERDUE").length;
   const running = data.claude.threads.filter((t) => t.state === "running" || t.state === "needs_you");
   const degraded = Object.entries(data.sources).filter(([, s]) => s === "error");
+  const relogins = data.ops.logins.filter((l) => l.needsYou).length;
   const prayer = useMemo(() => {
     if (!now) return null;
     const key = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
@@ -149,8 +189,16 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
             {now ? fmt(now.toISOString(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }) : "--:--:--"}
           </span>
           <span className="status">
-            <span className="live-dot" style={{ background: degraded.length ? "var(--amber)" : "var(--teal)" }} />
-            {degraded.length ? `${degraded.length} SOURCE${degraded.length > 1 ? "S" : ""} DEGRADED` : "ALL SYSTEMS NOMINAL"}
+            <span className="live-dot" style={{ background: relogins ? "var(--red)" : degraded.length ? "var(--amber)" : "var(--teal)" }} />
+            {relogins ? (
+              <a href="#logins" onClick={(e) => (e.preventDefault(), go("logins"))} style={{ color: "var(--red)" }}>
+                {relogins} RE-LOGIN{relogins > 1 ? "S" : ""} NEEDED
+              </a>
+            ) : degraded.length ? (
+              `${degraded.length} SOURCE${degraded.length > 1 ? "S" : ""} DEGRADED`
+            ) : (
+              "ALL SYSTEMS NOMINAL"
+            )}
           </span>
           {prayer && (
             <a href="#deen" onClick={(e) => (e.preventDefault(), go("deen"))}>
@@ -178,8 +226,22 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
 
       {tab !== "today" && (
         <main className="main">
-          {tab === "claude" ? (
+          {tab === "inbox" ? (
+            <InboxView data={data} fmt={fmt} onChanged={refresh} />
+          ) : tab === "claude" ? (
             <ClaudeView data={data} fmt={fmt} now={now} />
+          ) : tab === "automations" ? (
+            <AutomationsView ops={data.ops} now={now} fmt={fmt} />
+          ) : tab === "logins" ? (
+            <LoginsView ops={data.ops} now={now} onChanged={refresh} />
+          ) : tab === "projects" ? (
+            <ProjectsView tz={tz} now={now} />
+          ) : tab === "plan" ? (
+            <PlanView v={data.docket} tz={tz} now={now} onToggle={setDone} />
+          ) : tab === "study" ? (
+            <StudyView v={data.docket} tz={tz} now={now} />
+          ) : tab === "gym" ? (
+            <GymView plan={data.gymPlan} calendar={data.calendar.events ?? []} tz={tz} now={now} onChanged={refresh} />
           ) : tab === "deen" ? (
             <DeenView v={data.docket} tz={tz} now={now} />
           ) : !data.docket ? (
@@ -187,7 +249,7 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
           ) : tab === "courses" ? (
             <CoursesView v={data.docket} tz={tz} now={now} />
           ) : tab === "week" ? (
-            <WeekView v={data.docket} tz={tz} now={now} onToggle={setDone} />
+            <WeekView v={data.docket} tz={tz} now={now} onToggle={setDone} gym={data.gymPlan} />
           ) : tab === "work" ? (
             <WorkView v={data.docket} tz={tz} now={now} onToggle={setDone} />
           ) : (
@@ -220,11 +282,16 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
           </div>
         </section>
 
+        <ReconnectBanner data={data} />
+        <OpsAlert ops={data.ops} now={now} onGo={go} onChanged={refresh} />
+
         {data.docket && <ExamsStrip v={data.docket} tz={tz} now={now} />}
+
+        <AlertsPanel data={data} fmt={fmt} onChanged={refresh} onOpenInbox={() => go("inbox")} />
 
         <div className="grid">
           <TodayPanel tasks={data.tasks} onToggle={setDone} onAdded={refresh} />
-          <SchedulePanel data={data} now={now} fmt={fmt} />
+          <SchedulePanel data={data} now={now} fmt={fmt} onChanged={refresh} />
           <CanvasPanel data={data} now={now} fmt={fmt} />
         </div>
 
@@ -252,7 +319,7 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
         </section>
 
         <div className="grid">
-          <TrainingPanel data={data} onToggle={setDone} />
+          <TrainingPanel data={data} onToggle={setDone} onOpen={() => go("gym")} />
           <NotesPanel initial={data.notes} />
         </div>
 
@@ -343,86 +410,6 @@ function TodayPanel({
           </span>
         </label>
       ))}
-    </section>
-  );
-}
-
-const DAY_START = 6;
-const DAY_END = 23;
-
-function SchedulePanel({ data, now, fmt }: { data: DashboardData; now: Date | null; fmt: Fmt }) {
-  const hourOf = (iso: string) => {
-    const [h, m] = fmt(iso, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).split(":").map(Number);
-    return h + m / 60;
-  };
-  const pct = (h: number) => ((Math.min(Math.max(h, DAY_START), DAY_END) - DAY_START) / (DAY_END - DAY_START)) * 100;
-  // Routine blocks (prayer, meals) stay off the timeline; gym stays on.
-  const timed = data.calendar.today.filter((e) => !e.allDay && (!e.routine || e.kind === "gym"));
-  const allDay = data.calendar.today.filter((e) => e.allDay);
-  const hours = [];
-  for (let h = DAY_START; h < DAY_END; h += 2) hours.push(h);
-
-  return (
-    <section className="panel" aria-labelledby="schedule-title">
-      <div className="panel-head">
-        <h2 id="schedule-title">02 · SCHEDULE</h2>
-        <span className="aside">
-          GOOGLE CALENDAR <SourceBadge status={data.sources.calendar} />
-        </span>
-      </div>
-      <div className="week">
-        {data.calendar.week.map((d, i) => {
-          const date = new Date(`${d.date}T12:00:00Z`);
-          return (
-            <div key={d.date} className={`week-day${i === 0 ? " today" : ""}`}>
-              <span className="dow">{date.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).toUpperCase()}</span>
-              <span className="num">{date.getUTCDate()}</span>
-              <span className={`load${d.count >= 4 ? " heavy" : ""}`}>{d.count ? `${d.count} EVT` : "CLEAR"}</span>
-            </div>
-          );
-        })}
-      </div>
-      {allDay.length > 0 && (
-        <div className="allday">
-          {allDay.map((e) => (
-            <span key={e.id} className="badge">
-              {e.title}
-            </span>
-          ))}
-        </div>
-      )}
-      {data.sources.calendar === "off" && <p className="empty">Google Calendar isn&apos;t connected yet.</p>}
-      <div className="timeline">
-        {hours.map((h) => (
-          <div key={h} className="hour" style={{ top: `${pct(h)}%` }}>
-            <span>
-              {h % 12 || 12}
-              {h < 12 ? "A" : "P"}
-            </span>
-          </div>
-        ))}
-        {timed.map((e) => {
-          const top = pct(hourOf(e.start));
-          const height = Math.max(pct(hourOf(e.end)) - top, 4);
-          return (
-            <a
-              key={e.id}
-              className="event"
-              title={`${e.title}, ${fmt(e.start, { hour: "numeric", minute: "2-digit" })} to ${fmt(e.end, { hour: "numeric", minute: "2-digit" })}`}
-              href={e.url}
-              target="_blank"
-              rel="noreferrer"
-              style={{ top: `${top}%`, height: `calc(${height}% - 3px)`, borderLeftColor: EVENT_COLOR[e.kind] }}
-            >
-              <div className="event-title">{e.title}</div>
-              {hourOf(e.end) - hourOf(e.start) >= 1.5 && <div className="event-time">
-                {fmt(e.start, { hour: "numeric", minute: "2-digit" })} to {fmt(e.end, { hour: "numeric", minute: "2-digit" })}
-              </div>}
-            </a>
-          );
-        })}
-        {now && <div className="now-line" style={{ top: `${pct(hourOf(now.toISOString()))}%` }} aria-hidden="true" />}
-      </div>
     </section>
   );
 }
@@ -659,12 +646,17 @@ function UpdatesPanel({ updates, fresh, fmt }: { updates: UpdateItem[]; fresh: S
   );
 }
 
-function TrainingPanel({ data, onToggle }: { data: DashboardData; onToggle: (id: string, done: boolean) => void }) {
+function TrainingPanel({ data, onToggle, onOpen }: { data: DashboardData; onToggle: (id: string, done: boolean) => void; onOpen: () => void }) {
   return (
     <section className="panel" aria-labelledby="gym-title">
       <div className="panel-head">
         <h2 id="gym-title">08 · TRAINING</h2>
-        <span className="aside">TAP A DAY TO LOG IT</span>
+        <span className="aside">
+          TAP A DAY TO LOG IT ·{" "}
+          <a href="#gym" onClick={(e) => (e.preventDefault(), onOpen())} style={{ color: "var(--blue-soft)" }}>
+            FULL SPLIT →
+          </a>
+        </span>
       </div>
       <div className="gym">
         {data.gym.map((g, i) => {
@@ -676,7 +668,6 @@ function TrainingPanel({ data, onToggle }: { data: DashboardData; onToggle: (id:
               key={g.date}
               type="button"
               className={i === 1 ? "today" : ""}
-              disabled={g.status === "rest"}
               aria-pressed={g.status === "done"}
               onClick={() => onToggle(`gym:${g.date}`, g.status !== "done")}
             >
