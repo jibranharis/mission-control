@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
  * A "running" report can be followed by a final one; they merge into one run.
  */
 export async function POST(req: NextRequest) {
-  if (!ingestAuthorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await ingestAuthorized(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") return NextResponse.json({ error: "json body required" }, { status: 400 });
   const report = parseRunReport(body as Record<string, unknown>);

@@ -16,8 +16,16 @@ export function safeEqual(a: string, b: string): boolean {
 }
 
 /** True when a request carries `Authorization: Bearer $INGEST_TOKEN`, for jobs that report in. */
-export function ingestAuthorized(req: Request): boolean {
+/**
+ * Either the ingest token, or the dashboard's own session cookie: a browser
+ * that is signed in to the dashboard may push to it without carrying a secret.
+ */
+export async function ingestAuthorized(req: Request): Promise<boolean> {
   const secret = process.env.INGEST_TOKEN;
   const given = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  return Boolean(secret) && safeEqual(given, secret!);
+  if (secret && safeEqual(given, secret)) return true;
+  const password = process.env.DASHBOARD_PASSWORD;
+  if (!password) return false;
+  const cookie = req.headers.get("cookie")?.match(new RegExp(`(?:^|;\\s*)${AUTH_COOKIE}=([^;]+)`))?.[1] ?? "";
+  return safeEqual(cookie, await sessionToken(password));
 }
