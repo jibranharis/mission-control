@@ -1,7 +1,7 @@
 /** live: real data. off: not connected yet. demo: sample data (SAMPLE_DATA=1). */
 export type SourceStatus = "live" | "off" | "demo" | "error";
 
-export type TaskSource = "CANVAS" | "CAL" | "TODO" | "CLAUDE" | "GMAIL";
+export type TaskSource = "CANVAS" | "CAL" | "TODO" | "CLAUDE" | "GMAIL" | "LOGIN";
 
 export interface TaskItem {
   id: string;
@@ -198,6 +198,15 @@ export interface ClaudeProject {
   updatedAt?: string;
   stats: { commits?: number; openPRs?: number; mergedPRs?: number; sessions?: number; tokens?: number; cost?: number };
   graph: { nodes: GraphNode[]; edges: [string, string][] };
+  /** Claude Code usage in this project, from the Mac collector: what the flow chart is drawn from. */
+  usage?: {
+    total: TokenRow;
+    byModel: (TokenRow & { model: string })[];
+    /** Most expensive sessions first, each split by model. */
+    sessions: { id: string; title: string; tokens: number; cost: number; byModel: Record<string, { tokens: number; cost: number }>; state?: ThreadState; updatedAt?: string }[];
+  };
+  /** Shown before any data arrives, e.g. a pinned project the collector hasn't reported yet. */
+  placeholder?: boolean;
 }
 
 export interface RepoCard {
@@ -260,4 +269,6 @@ export interface DashboardData {
   updates: UpdateItem[];
   gym: GymDay[];
   notes: string;
+  /** Automations, their runs, and the logins they depend on. */
+  ops: import("@/lib/ops").OpsView;
 }

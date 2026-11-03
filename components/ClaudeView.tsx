@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { ClaudeProject, DashboardData, RepoCard, ThreadState, TokenRow } from "@/lib/types";
+import { withPinned } from "@/lib/claude";
+import { legendFor, modelColors, modelLabel, overallFlow, projectUsageFlow, projectWorkFlow, type Measure } from "@/lib/flows";
+import { FlowLegend, FlowSankey } from "./FlowSankey";
 
 const ProjectGraph = dynamic(() => import("./ProjectGraph").then((m) => m.ProjectGraph), {
   ssr: false,
@@ -24,19 +27,14 @@ export const tokens = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(2)}B` : n 
 const usd = (n: number) => (n >= 100 ? `$${Math.round(n)}` : `$${n.toFixed(2)}`);
 const total = (r: TokenRow) => r.input + r.output + r.cacheRead + r.cacheWrite;
 
-/** "claude-opus-4-5-20251101" → "Opus 4.5". */
-export function modelLabel(id: string) {
-  const m = id.replace(/^claude-/, "").replace(/-\d{8}$/, "").replace(/\[.*\]$/, "");
-  const parts = m.split("-");
-  const name = parts[0] ?? m;
-  const ver = parts.slice(1).join(".");
-  return `${name.charAt(0).toUpperCase()}${name.slice(1)}${ver ? " " + ver : ""}`;
-}
+export { modelLabel };
 
 export function ClaudeView({ data, fmt, now }: { data: DashboardData; fmt: Fmt; now: Date | null }) {
   const c = data.claude;
   const t = c.tokens;
-  const projects = c.projects ?? [];
+  const projects = useMemo(() => withPinned(c.projects ?? []), [c.projects]);
+  const [measure, setMeasure] = useState<Measure>("tokens");
+  const colors = useMemo(() => modelColors((t?.byModel ?? []).map((r) => r.model)), [t?.byModel]);
   const repos = c.repos ?? [];
   const [selected, setSelected] = useState<string | null>(null);
   const project = projects.find((p) => p.id === selected) ?? projects[0] ?? null;
@@ -68,10 +66,12 @@ export function ClaudeView({ data, fmt, now }: { data: DashboardData; fmt: Fmt; 
         <DailyPanel data={data} fmt={fmt} />
       </div>
 
+      <OverallPanel data={data} projects={projects} measure={measure} setMeasure={setMeasure} colors={colors} />
+
       <section className="panel" aria-labelledby="projects-title">
         <div className="panel-head">
           <h2 id="projects-title">PROJECTS · FLOW CHARTS</h2>
-          <span className="aside">DRAG NODES · CLICK TO OPEN · MERGED AND COMMITTED WORK IS TEAL</span>
+          <span className="aside">PICK A PROJECT · FLOW SHOWS WHERE ITS TOKENS WENT · MAP SHOWS BRANCHES, PRS AND COMMITS</span>
         </div>
         {projects.length === 0 ? (
           <p className="empty">
@@ -93,6 +93,8 @@ export function ClaudeView({ data, fmt, now }: { data: DashboardData; fmt: Fmt; 
                       p.stats.mergedPRs != null ? `${p.stats.mergedPRs} MERGED` : null,
                       p.stats.sessions ? `${p.stats.sessions} SESSIONS` : null,
                       p.stats.tokens ? `${tokens(p.stats.tokens)} TOKENS` : null,
+                      p.stats.cost ? usd(p.stats.cost) : null,
+                      p.placeholder ? "WAITING FOR THE MAC" : null,
                     ]
                       .filter(Boolean)
                       .join(" · ")
@@ -102,7 +104,7 @@ export function ClaudeView({ data, fmt, now }: { data: DashboardData; fmt: Fmt; 
                 </button>
               ))}
             </div>
-            {project && <ProjectDetail project={project} data={data} fmt={fmt} />}
+            {project && <ProjectDetail project={project} data={data} fmt={fmt} measure={measure} setMeasure={setMeasure} colors={colors} />}
           </div>
         )}
       </section>
@@ -158,7 +160,7 @@ function LimitsPanel({ data, fmt, now }: { data: DashboardData; fmt: Fmt; now: D
         <span className="aside">{u.readAt ? `READ ${fmt(u.readAt, { weekday: "short", hour: "numeric", minute: "2-digit" }).toUpperCase()}` : "FROM CLAUDE.AI"}</span>
       </div>
       <div className="panel-body">
-        {limits.length === 0 && <p className="empty" style={{ padding: 0 }}>Not read yet. The Docket sync reads your claude.ai usage page three times a day.</p>}
+        {limits.length === 0 && <p className="empty" style={{ padding: 0 }}>Not read yet. The school sync reads your claude.ai usage page three times a day.</p>}
         {limits.map((l) => (
           <div key={l.label} className="limit">
             <div className="limit-head">
@@ -284,7 +286,83 @@ function DailyPanel({ data, fmt }: { data: DashboardData; fmt: Fmt }) {
   );
 }
 
-function ProjectDetail({ project: p, data, fmt }: { project: ClaudeProject; data: DashboardData; fmt: Fmt }) {
+function MeasureToggle({ measure, setMeasure }: { measure: Measure; setMeasure: (m: Measure) => void }) {
+  return (
+    <div className="seg" role="group" aria-label="Size the flow by">
+      <button aria-pressed={measure === "tokens"} onClick={() => setMeasure("tokens")}>
+        TOKENS
+      </button>
+      <button aria-pressed={measure === "cost"} onClick={() => setMeasure("cost")}>
+        API VALUE
+      </button>
+    </div>
+  );
+}
+
+function CollectorHint() {
+  return (
+    <p className="empty">
+      Token flow needs the small Mission Control reporter on your Mac, which reads Claude Code&apos;s own logs every 10 minutes. Your Anthropic API key
+      can&apos;t see Pro plan usage, so it isn&apos;t needed.
+    </p>
+  );
+}
+
+function OverallPanel({
+  data,
+  projects,
+  measure,
+  setMeasure,
+  colors,
+}: {
+  data: DashboardData;
+  projects: ClaudeProject[];
+  measure: Measure;
+  setMeasure: (m: Measure) => void;
+  colors: Record<string, string>;
+}) {
+  const t = data.claude.tokens;
+  const flow = useMemo(() => (t ? overallFlow(t, projects, measure, colors) : null), [t, projects, measure, colors]);
+  return (
+    <section className="panel" aria-labelledby="overall-title">
+      <div className="panel-head">
+        <h2 id="overall-title">ALL PROJECTS · {measure === "cost" ? "API VALUE" : "TOKEN"} FLOW</h2>
+        <MeasureToggle measure={measure} setMeasure={setMeasure} />
+      </div>
+      {flow ? (
+        <>
+          <FlowSankey flow={flow} />
+          <div className="sankey-foot">
+            <FlowLegend rows={legendFor(flow, 1)} />
+            <FlowLegend rows={legendFor(flow, 2)} />
+          </div>
+        </>
+      ) : (
+        <CollectorHint />
+      )}
+    </section>
+  );
+}
+
+function ProjectDetail({
+  project: p,
+  data,
+  fmt,
+  measure,
+  setMeasure,
+  colors,
+}: {
+  project: ClaudeProject;
+  data: DashboardData;
+  fmt: Fmt;
+  measure: Measure;
+  setMeasure: (m: Measure) => void;
+  colors: Record<string, string>;
+}) {
+  const usageFlow = useMemo(() => projectUsageFlow(p, measure, colors), [p, measure, colors]);
+  const workFlow = useMemo(() => (usageFlow ? null : projectWorkFlow(p)), [p, usageFlow]);
+  const flow = usageFlow ?? workFlow;
+  const [view, setView] = useState<"flow" | "map">("flow");
   const threads = data.claude.threads.filter((t) => t.project.toLowerCase() === p.name.toLowerCase());
   const counts = useMemo(() => {
     const n: Record<string, number> = {};
@@ -293,6 +371,7 @@ function ProjectDetail({ project: p, data, fmt }: { project: ClaudeProject; data
   }, [p.graph.nodes]);
   const [tall, setTall] = useState(false);
   useEffect(() => setTall(false), [p.id]);
+  const hasMap = p.graph.nodes.length > 1;
   return (
     <div className="project-detail">
       <div className="project-meta">
@@ -321,12 +400,39 @@ function ProjectDetail({ project: p, data, fmt }: { project: ClaudeProject; data
               OPEN REPO ↗
             </a>
           )}
-          <button className="btn" onClick={() => setTall((v) => !v)}>
-            {tall ? "SMALLER" : "BIGGER"}
-          </button>
+          <div className="seg" role="group" aria-label="Chart">
+            <button aria-pressed={view === "flow"} onClick={() => setView("flow")}>
+              FLOW
+            </button>
+            <button aria-pressed={view === "map"} onClick={() => setView("map")} disabled={!hasMap}>
+              MAP
+            </button>
+          </div>
+          {view === "flow" && usageFlow && <MeasureToggle measure={measure} setMeasure={setMeasure} />}
+          {view === "map" && (
+            <button className="btn" onClick={() => setTall((v) => !v)}>
+              {tall ? "SMALLER" : "BIGGER"}
+            </button>
+          )}
         </div>
       </div>
-      <ProjectGraph graph={p.graph} height={tall ? 900 : 520} />
+      {view === "map" && hasMap ? (
+        <ProjectGraph graph={p.graph} height={tall ? 900 : 520} />
+      ) : flow ? (
+        <>
+          {workFlow && <p className="row-meta" style={{ padding: "12px 18px 0" }}>NO CLAUDE CODE USAGE REPORTED FOR THIS PROJECT YET · SHOWING ITS GITHUB WORK INSTEAD</p>}
+          <FlowSankey flow={flow} />
+          <div className="sankey-foot">
+            <FlowLegend rows={legendFor(flow, 1)} />
+          </div>
+        </>
+      ) : p.placeholder ? (
+        <p className="empty">
+          {p.name} hasn&apos;t reported in yet. It lives on your Mac ({p.repo}), so its flow chart appears the first time the Mac reporter runs.
+        </p>
+      ) : (
+        <CollectorHint />
+      )}
       {threads.length > 0 && (
         <div>
           <div className="row-meta" style={{ padding: "12px 18px 4px" }}>CLAUDE THREADS IN THIS PROJECT</div>

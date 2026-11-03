@@ -106,7 +106,8 @@ def read_transcripts():
         sid = os.path.splitext(os.path.basename(path))[0]
         mtime = os.path.getmtime(path)
         s = sessions.setdefault(sid, {"id": sid, "cwd": None, "title": None, "summary": None, "first": None, "last": None,
-                                      "model": None, "tokens": 0, "cost": 0.0, "messages": 0, "mtime": 0})
+                                      "model": None, "tokens": 0, "cost": 0.0, "messages": 0, "mtime": 0,
+                                      "rows": defaultdict(row)})
         s["mtime"] = max(s["mtime"], mtime)
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -148,6 +149,7 @@ def read_transcripts():
                         add(by_project[proj], model, u, sid)
                         add(by_day[local_day(ts or "")], model, u, sid)
                         add(total, model, u, sid)
+                        add(s["rows"][model], model, u, sid)
                         s["model"] = model
                         s["messages"] += 1
                         s["tokens"] += u.get("input_tokens", 0) + u.get("output_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
@@ -186,6 +188,37 @@ def repo_url(path):
 
 def short(s, n=56):
     return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def merge_rows(sessions_here):
+    """Per-model token rows for a set of sessions, plus their total."""
+    by_model, total = defaultdict(row), row()
+    for s in sessions_here:
+        for model, r in s["rows"].items():
+            for dst in (by_model[model], total):
+                for k in ("input", "output", "cacheRead", "cacheWrite", "cost", "messages"):
+                    dst[k] += r[k]
+                dst["sessions"] |= r["sessions"]
+    return by_model, total
+
+
+def tok(r):
+    return r["input"] + r["output"] + r["cacheRead"] + r["cacheWrite"]
+
+
+def project_usage(sessions_here):
+    """What the project's flow chart is drawn from: tokens per model and per session."""
+    if not sessions_here:
+        return None
+    by_model, total = merge_rows(sessions_here)
+    sessions = sorted(sessions_here, key=lambda s: -s["cost"])[:12]
+    return {
+        "total": finish(total),
+        "byModel": sorted([dict(model=m, **finish(r)) for m, r in by_model.items()], key=lambda r: -r["cost"]),
+        "sessions": [{"id": s["id"], "title": short(s["summary"] or s["title"] or s["id"], 64), "tokens": s["tokens"], "cost": round(s["cost"], 4),
+                      "byModel": {m: {"tokens": tok(r), "cost": round(r["cost"], 4)} for m, r in s["rows"].items()}, "state": s["state"],
+                      "updatedAt": datetime.fromtimestamp(s["mtime"], timezone.utc).isoformat()} for s in sessions],
+    }
 
 
 def project_graph(path, sessions_here):
@@ -231,6 +264,7 @@ def project_graph(path, sessions_here):
         "stats": {"commits": int(commits_total) if commits_total and commits_total.isdigit() else None, "sessions": len(sessions_here),
                   "tokens": sum(s["tokens"] for s in sessions_here), "cost": round(sum(s["cost"] for s in sessions_here), 2)},
         "graph": {"nodes": [{k: v for k, v in n.items() if v is not None} for n in nodes], "edges": edges},
+        "usage": project_usage(sessions_here),
     }
 
 
@@ -257,16 +291,31 @@ def main():
                 if os.path.isdir(os.path.join(p, ".git")):
                     roots.setdefault(p, [])
     projects = []
+    grouped = set()
+    # Tokens by project follow the repo a session ran in, not just its folder name.
+    by_project = defaultdict(list)
     for top, here in roots.items():
         g = project_graph(top, here)
         if g:
             projects.append(g)
+            grouped.update(s["id"] for s in here)
+            by_project[g["name"]].extend(here)
+    for s in sessions:
+        if s["id"] not in grouped:
+            by_project[project_name(s["cwd"] or "Other")].append(s)
+    rows = []
+    for name, here in by_project.items():
+        if here:
+            _, total = merge_rows(here)
+            rows.append(dict(project=name, **finish(total)))
+    tokens["byProject"] = sorted(rows, key=lambda r: -r["cost"])
+    project_of = {s["id"]: name for name, here in by_project.items() for s in here}
     projects.sort(key=lambda p: (not p["pinned"], p["updatedAt"] or ""), reverse=False)
     projects.sort(key=lambda p: p["updatedAt"] or "", reverse=True)
     projects.sort(key=lambda p: not p["pinned"])
 
     threads = [{
-        "id": s["id"], "title": s["summary"] or s["title"] or s["id"], "project": project_name(s["cwd"] or "Other"),
+        "id": s["id"], "title": s["summary"] or s["title"] or s["id"], "project": project_of.get(s["id"]) or project_name(s["cwd"] or "Other"),
         "state": s["state"], "step": f"{s['messages']} turns", "updatedAt": datetime.fromtimestamp(s["mtime"], timezone.utc).isoformat(),
         "origin": "mac", "model": s["model"], "tokens": s["tokens"], "cost": round(s["cost"], 2),
     } for s in sessions[:40]]

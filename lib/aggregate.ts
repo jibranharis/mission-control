@@ -9,6 +9,7 @@ import { getJSON, KEYS } from "@/lib/store";
 import { GYM_SPLIT } from "@/lib/config";
 import { DOCKET_PREFIX, docketBlocks, docketCalendar, type DocketView } from "@/lib/sources/docket";
 import { TIMEZONE, dateKey, isToday, startOfDay } from "@/lib/time";
+import { buildOps } from "@/lib/ops";
 
 export interface Todo {
   id: string;
@@ -59,7 +60,7 @@ export async function buildDashboard(): Promise<DashboardData> {
         return calendarData([...(g.events ?? []), ...docketBlocks(docket)].sort((a, b) => a.start.localeCompare(b.start)));
       }
     : async () => (docket ? docketCalendar(docket) : null);
-  const [calendar, gmail, canvas, claude, todos, done, notes, github, accounts] = await Promise.all([
+  const [calendar, gmail, canvas, claude, todos, done, notes, github, accounts, ops] = await Promise.all([
     resolve(googleConfigured || Boolean(docket), loadCalendar, emptyCalendar, demoCalendar),
     resolve(googleConfigured, fetchMail, () => [], () => []),
     resolve(true, async () => (await fetchCanvas())?.data ?? null, emptyCanvas, demoCanvas),
@@ -69,6 +70,7 @@ export async function buildDashboard(): Promise<DashboardData> {
     getJSON<string>(KEYS.notes, ""),
     fetchGitHub(),
     accountStatuses(),
+    buildOps(),
   ]);
 
   // GitHub fills in repositories and projects the Mac collector hasn't sent; pushed ones win.
@@ -135,7 +137,20 @@ export async function buildDashboard(): Promise<DashboardData> {
       done: isDone,
     });
   }
-  tasks.sort((a, b) => Number(a.done) - Number(b.done) || (a.due ?? "9").localeCompare(b.due ?? "9"));
+  // Sign-ins that broke come first: every automation behind them is stuck until they're redone.
+  for (const l of ops.logins.filter((l) => l.needsYou)) {
+    tasks.push({
+      id: `login:${l.id}`,
+      title: `Sign back in to ${l.name}`,
+      meta: `RE-LOGIN NEEDED${l.usedBy.length ? ` · BLOCKS ${l.usedBy.length} AUTOMATION${l.usedBy.length > 1 ? "S" : ""}` : ""}`,
+      source: "LOGIN",
+      dueToday: true,
+      done: false,
+      url: l.loginUrl,
+    });
+  }
+  const first = (t: TaskItem) => (t.source === "LOGIN" ? 0 : 1);
+  tasks.sort((a, b) => Number(a.done) - Number(b.done) || first(a) - first(b) || (a.due ?? "9").localeCompare(b.due ?? "9"));
 
   const updates: UpdateItem[] = [...canvas.data.updates, ...claude.data.updates]
     .filter((u) => Date.now() - new Date(u.at).getTime() < 2 * 86_400_000)
@@ -175,5 +190,6 @@ export async function buildDashboard(): Promise<DashboardData> {
     updates,
     gym,
     notes,
+    ops,
   };
 }
