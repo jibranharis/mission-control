@@ -4,9 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import type { ClaudeProject, DashboardData, RepoCard, ThreadState, TokenRow } from "@/lib/types";
 import { withPinned } from "@/lib/claude";
+import { threadsForProject } from "@/lib/overview";
 import { legendFor, modelColors, modelLabel, overallFlow, projectUsageFlow, projectWorkFlow, type Measure } from "@/lib/flows";
 import { FlowLegend, FlowSankey } from "./FlowSankey";
 
+const OverviewGraph = dynamic(() => import("./OverviewGraph").then((m) => m.OverviewGraph), {
+  ssr: false,
+  loading: () => <div className="graph" />,
+});
 const ProjectGraph = dynamic(() => import("./ProjectGraph").then((m) => m.ProjectGraph), {
   ssr: false,
   loading: () => <div className="graph" />,
@@ -66,6 +71,14 @@ export function ClaudeView({ data, fmt, now }: { data: DashboardData; fmt: Fmt; 
         <DailyPanel data={data} fmt={fmt} />
       </div>
 
+      <section className="panel" aria-labelledby="map-title">
+        <div className="panel-head">
+          <h2 id="map-title">MAP · EVERY PROJECT AND THREAD</h2>
+          <span className="aside">FINISHED THREADS FOLD UP · CLICK A FOLD TO OPEN IT · DRAG TO REARRANGE</span>
+        </div>
+        <OverviewGraph projects={projects} threads={c.threads} />
+      </section>
+
       <OverallPanel data={data} projects={projects} measure={measure} setMeasure={setMeasure} colors={colors} />
 
       <section className="panel" aria-labelledby="projects-title">
@@ -104,7 +117,7 @@ export function ClaudeView({ data, fmt, now }: { data: DashboardData; fmt: Fmt; 
                 </button>
               ))}
             </div>
-            {project && <ProjectDetail project={project} data={data} fmt={fmt} measure={measure} setMeasure={setMeasure} colors={colors} />}
+            {project && <ProjectDetail project={project} projects={projects} data={data} fmt={fmt} measure={measure} setMeasure={setMeasure} colors={colors} />}
           </div>
         )}
       </section>
@@ -346,6 +359,7 @@ function OverallPanel({
 
 function ProjectDetail({
   project: p,
+  projects,
   data,
   fmt,
   measure,
@@ -353,6 +367,7 @@ function ProjectDetail({
   colors,
 }: {
   project: ClaudeProject;
+  projects: ClaudeProject[];
   data: DashboardData;
   fmt: Fmt;
   measure: Measure;
@@ -363,7 +378,7 @@ function ProjectDetail({
   const workFlow = useMemo(() => (usageFlow ? null : projectWorkFlow(p)), [p, usageFlow]);
   const flow = usageFlow ?? workFlow;
   const [view, setView] = useState<"flow" | "map">("flow");
-  const threads = data.claude.threads.filter((t) => t.project.toLowerCase() === p.name.toLowerCase());
+  const threads = useMemo(() => threadsForProject(p, projects, data.claude.threads), [p, projects, data.claude.threads]);
   const counts = useMemo(() => {
     const n: Record<string, number> = {};
     for (const node of p.graph.nodes) n[node.kind] = (n[node.kind] ?? 0) + 1;

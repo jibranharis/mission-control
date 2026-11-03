@@ -533,3 +533,14 @@ a.sankey-card:hover { border-color: var(--line-strong); }
   .waiting-row .row-main { flex-basis: 100%; order: 2; }
   .waiting-go { order: 3; }
 }
+
+/* Overview map: every project as a column, its threads stacked under it. */
+.graph.overview .node:not(.agent) { width: 250px; white-space: nowrap; }
+.graph.overview .node .label { overflow: hidden; text-overflow: ellipsis; }
+.graph.overview .node .meta { overflow: hidden; text-overflow: ellipsis; }
+.graph.overview .node.agent { min-width: 120px; }
+.graph.overview .node.thread { font-weight: 400; }
+.graph.overview .node.fold { cursor: pointer; border-style: dashed; color: var(--text-2); background: transparent; }
+.graph.overview .node.fold:hover { border-color: var(--blue-soft); color: var(--text); }
+.graph.overview .node.branch { font-weight: 400; color: var(--text-2); border-color: var(--line); background: var(--panel); }
+.graph.overview .node.agent .label { color: var(--bg); font-weight: 600; }

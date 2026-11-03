@@ -30,6 +30,8 @@ URL = os.environ.get("MC_URL", "").rstrip("/")
 TOKEN = os.environ.get("MC_TOKEN", "")
 SCAN_DIRS = [os.path.expanduser(d) for d in os.environ.get("MC_SCAN_DIRS", "~/Projects:~/Documents/GitHub").split(":") if d]
 PINNED = {s.strip().lower() for s in os.environ.get("MC_PINNED", "Solo Kitchen").split(",") if s.strip()}
+# Every session goes up as a thread so the map can show each project in full (finished ones fold up there).
+THREADS_MAX = int(os.environ.get("MC_THREADS_MAX", "250"))
 NAMES = {"Solo": "Solo Kitchen"}
 for pair in os.environ.get("MC_NAMES", "").split(","):
     if "=" in pair:
@@ -407,7 +409,7 @@ def main():
     projects.sort(key=lambda p: p["updatedAt"] or "", reverse=True)
     projects.sort(key=lambda p: not p["pinned"])
 
-    threads = [thread(s, project_of) for s in sessions[:40]]
+    threads = [thread(s, project_of) for s in sessions[:THREADS_MAX]]
     push({"origin": "mac", "tokens": tokens, "projects": projects, "threads": threads})
     print(f"{len(sessions)} sessions, {len(projects)} projects, {tokens['total']['messages']} messages, ${tokens['total']['cost']:.2f} API-equivalent")
     waits = [t for t in threads if t.get("waiting")]
@@ -415,7 +417,7 @@ def main():
     # Between full runs, keep an eye on sessions that might stop to ask you something,
     # so a permission prompt or question reaches the dashboard within a minute.
     if not sys.stdout.isatty() and os.environ.get("MC_WATCH", "1") != "0":
-        watch(sessions[:40], project_of, signature(threads))
+        watch(sessions[:THREADS_MAX], project_of, signature(threads))
 
 
 def settle(s, now):
