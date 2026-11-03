@@ -178,11 +178,16 @@ function CanvasTokenBox({ login, onChanged }: { login?: LoginView; onChanged: ()
     <section className="panel" id="canvas-token" aria-labelledby="canvas-token-title">
       <div className="panel-head">
         <h2 id="canvas-token-title">CANVAS ACCESS TOKEN</h2>
-        <span className="tag" style={{ color: working ? "var(--teal)" : "var(--red)" }}>
-          {working ? "CONNECTED" : login?.status === "expired" ? "TOKEN REJECTED" : "NOT SET UP"}
+        <span className="tag" style={{ color: working ? "var(--teal)" : login ? "var(--red)" : "var(--muted)" }}>
+          {working ? "CONNECTED" : login?.status === "expired" ? "TOKEN REJECTED" : "OPTIONAL"}
         </span>
       </div>
       <div className="panel-body">
+        {!login && (
+          <p className="row-meta" style={{ margin: "0 0 10px" }}>
+            OPTIONAL. ONLY WORKS IF CANVAS SHOWS YOU A + NEW ACCESS TOKEN BUTTON (UC DAVIS CURRENTLY DOESN&apos;T). CANVAS STILL COMES IN THROUGH THE DOCKET SYNC.
+          </p>
+        )}
         <ol className="login-how" style={{ margin: "0 0 12px", paddingLeft: 18, lineHeight: 1.6 }}>
           <li>
             Open{" "}
