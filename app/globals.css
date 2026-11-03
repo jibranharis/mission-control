@@ -322,3 +322,41 @@ details[open] summary::before { content: "− "; }
   .stat { min-width: 0; flex: 1; padding: 10px 12px; }
   .stat .hint { display: none; }
 }
+
+/* Projects, plan and study */
+.inline-edit { background: transparent; border: 0; border-bottom: 1px solid transparent; color: var(--text); font: inherit; padding: 2px 0; width: 100%; min-width: 0; outline: none; }
+.inline-edit:hover { border-bottom-color: var(--line-strong); }
+.inline-edit:focus { border-bottom-color: var(--blue-soft); }
+.project-name { font-family: var(--font-display); font-size: 26px; font-weight: 500; }
+.inline-date { background: transparent; border: 0; color: var(--muted); font-family: var(--font-mono); font-size: 11px; padding: 0; color-scheme: dark; }
+.inline-date:hover { color: var(--text); }
+.icon-btn { background: none; border: 0; color: var(--dim); font-size: 18px; line-height: 1; min-width: 28px; min-height: 28px; cursor: pointer; flex: none; }
+.icon-btn:hover { color: var(--amber); }
+.link-btn { background: none; border: 0; padding: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; color: var(--dim); cursor: pointer; }
+.link-btn:hover { color: var(--amber); }
+.group-toggle { width: 100%; border: 0; border-bottom: 1px solid var(--line); cursor: pointer; text-align: left; }
+.group-toggle:hover { color: var(--text); }
+.project-card .meter { height: 2px; margin-top: 4px; }
+
+.plan-layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 20px; align-items: start; }
+.plan-pool { max-height: calc(100vh - 140px); overflow-y: auto; position: sticky; top: 64px; }
+.plan-pool > * { flex-shrink: 0; }
+.plan-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.plan-add { flex-direction: row; border-bottom: 1px solid var(--line); }
+.pool-item { cursor: grab; }
+.pool-item:hover { background: var(--hover); }
+.plan-select { min-height: 36px; background: var(--bg); border: 1px solid var(--line-strong); color: var(--text-2); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; padding: 0 8px; flex: none; color-scheme: dark; }
+.pool-select { align-self: flex-start; margin-top: 6px; min-height: 32px; }
+.plan-select.mini { min-height: 26px; font-size: 10px; border-color: var(--line); color: var(--muted); align-self: flex-start; margin-top: 2px; }
+.day.drop { border-color: var(--blue-soft); background: var(--panel-raised); }
+.day.past { opacity: 0.6; }
+.due-mark { padding: 6px 12px 6px 10px; border-left: 2px solid; border-bottom: 1px solid var(--line-soft); font-size: 12px; color: var(--text-2); }
+@media (max-width: 1000px) {
+  .plan-layout { grid-template-columns: minmax(0, 1fr); }
+  .plan-pool { position: static; max-height: 420px; }
+}
+@media (max-width: 520px) { .wrap-sm { flex-wrap: wrap; } .wrap-sm > input:first-of-type { flex-basis: 100%; } }
+
+.study-clock { font-size: clamp(40px, 7vw, 56px); font-weight: 500; letter-spacing: 0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.filters button:disabled { opacity: 0.5; cursor: default; }
+.goal-input { width: 52px; min-height: 26px; background: var(--bg); border: 1px solid var(--line-strong); color: var(--text); font-family: var(--font-mono); font-size: 12px; padding: 0 6px; text-align: right; }
