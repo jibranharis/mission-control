@@ -11,14 +11,22 @@ DIR="$HOME/Library/Application Support/mission-control"
 LABEL="com.mission-control.claude-collector"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 mkdir -p "$DIR" "$HOME/Library/LaunchAgents"
-curl -fsSL "https://raw.githubusercontent.com/jibranharis/mission-control/main/scripts/claude-collector.py" -o "$DIR/claude-collector.py"
+SRC="https://raw.githubusercontent.com/jibranharis/mission-control/main/scripts/claude-collector.py"
+curl -fsSL "$SRC" -o "$DIR/claude-collector.py"
+# Each run fetches the latest collector first (keeping the old copy if offline), so fixes reach the Mac without reinstalling.
+cat > "$DIR/run.sh" <<RUN
+#!/bin/bash
+curl -fsSL "$SRC" -o "$DIR/claude-collector.py.new" && mv "$DIR/claude-collector.py.new" "$DIR/claude-collector.py"
+exec "$(command -v python3)" "$DIR/claude-collector.py"
+RUN
+chmod +x "$DIR/run.sh"
 
 cat > "$PLIST" <<PL
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>$LABEL</string>
-  <key>ProgramArguments</key><array><string>$(command -v python3)</string><string>$DIR/claude-collector.py</string></array>
+  <key>ProgramArguments</key><array><string>/bin/bash</string><string>$DIR/run.sh</string></array>
   <key>EnvironmentVariables</key><dict>
     <key>MC_URL</key><string>$URL</string>
     <key>MC_TOKEN</key><string>$TOKEN</string>
