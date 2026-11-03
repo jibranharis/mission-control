@@ -1,11 +1,6 @@
 import { TIMEZONE } from "@/lib/time";
 import type { ClaudeProject, ClaudeThread, GraphNode } from "@/lib/types";
 
-/** How many open threads a project shows before the rest fold into "+N more". */
-export const OPEN_SHOWN = 5;
-/** How many repos without Claude sessions the "Other repos" column lists. */
-const OTHER_SHOWN = 6;
-
 export interface OverviewColumn {
   project: GraphNode;
   children: GraphNode[];
@@ -57,11 +52,11 @@ function threadNode(t: ClaudeThread): GraphNode {
 }
 
 /**
- * Every project with its threads. Open threads show first (up to OPEN_SHOWN, unless expanded),
- * finished ones fold into one "N finished" node so a busy project stays a short column.
- * Repos nobody has run Claude in share one "Other repos" column.
+ * Every project with every thread that branched off it: open ones first (needs you, running,
+ * then newest), finished ones after. Nothing is folded away. Repos nobody has run Claude in
+ * share one "Other repos" column.
  */
-export function overview(projects: ClaudeProject[], threads: ClaudeThread[], expanded: ReadonlySet<string> = new Set()): Overview {
+export function overview(projects: ClaudeProject[], threads: ClaudeThread[]): Overview {
   const groups = new Map<string, { project?: ClaudeProject; name: string; threads: ClaudeThread[] }>();
   for (const p of projects) groups.set(p.id, { project: p, name: p.name, threads: [] });
   for (const t of threads) {
@@ -86,18 +81,8 @@ export function overview(projects: ClaudeProject[], threads: ClaudeThread[], exp
     const pid = `project:${key}`;
     const sorted = [...g.threads].sort(byUrgency);
     const open = sorted.filter((t) => t.state !== "done");
-    const done = sorted.filter((t) => t.state === "done");
-    const all = expanded.has(pid);
-    const children: GraphNode[] = (all ? open : open.slice(0, OPEN_SHOWN)).map(threadNode);
-    if (!all && open.length > OPEN_SHOWN)
-      children.push({ id: `${pid}:more`, kind: "subagent", label: `+${open.length - OPEN_SHOWN} more open`, meta: "CLICK TO SHOW" });
-    if (done.length) {
-      if (all) children.push(...done.map(threadNode));
-      else children.push({ id: `${pid}:done`, kind: "subagent", label: `${done.length} finished`, state: "done", meta: `LAST ${day(done[0].updatedAt)} · CLICK TO SHOW` });
-    }
-    if (all && (open.length > OPEN_SHOWN || done.length))
-      children.push({ id: `${pid}:less`, kind: "subagent", label: "Show less", meta: "CLICK TO FOLD" });
-    const sessions = g.project?.stats.sessions ?? g.threads.length;
+    const children = sorted.map(threadNode);
+    const sessions = Math.max(g.project?.stats.sessions ?? 0, g.threads.length);
     return {
       project: {
         id: pid,
@@ -114,18 +99,14 @@ export function overview(projects: ClaudeProject[], threads: ClaudeThread[], exp
 
   if (quiet.length) {
     const pid = "project:other-repos";
-    const all = expanded.has(pid);
-    const repos = quiet.map(([key, g]) => ({
+    const children: GraphNode[] = quiet.map(([key, g]) => ({
       id: `repo:${key}`,
       kind: "branch" as const,
       label: g.name,
       url: g.project?.url,
       meta: [g.project?.path ? "ON THE MAC" : g.project?.repo ? "GITHUB" : null, g.project?.updatedAt ? day(g.project.updatedAt) : null].filter(Boolean).join(" · "),
     }));
-    const children: GraphNode[] = all ? repos : repos.slice(0, OTHER_SHOWN);
-    if (!all && repos.length > OTHER_SHOWN) children.push({ id: `${pid}:more`, kind: "subagent", label: `+${repos.length - OTHER_SHOWN} more repos`, meta: "CLICK TO SHOW" });
-    if (all && repos.length > OTHER_SHOWN) children.push({ id: `${pid}:less`, kind: "subagent", label: "Show less", meta: "CLICK TO FOLD" });
-    columns.push({ project: { id: pid, kind: "project", label: "Other repos", meta: `${repos.length} WITHOUT CLAUDE SESSIONS` }, children });
+    columns.push({ project: { id: pid, kind: "project", label: "Other repos", meta: `${children.length} WITHOUT CLAUDE SESSIONS` }, children });
   }
 
   const open = threads.filter((t) => t.state !== "done").length;

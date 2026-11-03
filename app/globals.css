@@ -540,7 +540,7 @@ a.sankey-card:hover { border-color: var(--line-strong); }
 .graph.overview .node .meta { overflow: hidden; text-overflow: ellipsis; }
 .graph.overview .node.agent { min-width: 120px; }
 .graph.overview .node.thread { font-weight: 400; }
-.graph.overview .node.fold { cursor: pointer; border-style: dashed; color: var(--text-2); background: transparent; }
-.graph.overview .node.fold:hover { border-color: var(--blue-soft); color: var(--text); }
+.graph.overview .node.finished { min-height: 0; padding: 6px 12px; color: var(--text-2); border-color: var(--line); background: transparent; font-size: 12px; }
+.graph.overview .node.finished:hover { border-color: var(--line-strong); color: var(--text); }
 .graph.overview .node.branch { font-weight: 400; color: var(--text-2); border-color: var(--line); background: var(--panel); }
 .graph.overview .node.agent .label { color: var(--bg); font-weight: 600; }
