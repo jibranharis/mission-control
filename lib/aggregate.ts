@@ -6,7 +6,7 @@ import { fetchCanvas } from "@/lib/sources/canvas";
 import { fetchGitHub } from "@/lib/sources/github";
 import { mergeProjects } from "@/lib/claude";
 import { getJSON, KEYS } from "@/lib/store";
-import { GYM_SPLIT } from "@/lib/config";
+import { GYM_KEY, normalizeGym, planGym, type GymData } from "@/lib/gym";
 import { DOCKET_PREFIX, docketBlocks, docketCalendar, type DocketView } from "@/lib/sources/docket";
 import { TIMEZONE, dateKey, isToday, startOfDay } from "@/lib/time";
 import { buildOps } from "@/lib/ops";
@@ -162,6 +162,26 @@ export async function buildDashboard(): Promise<DashboardData> {
       url: "#logins",
     });
   }
+  const gymPlan = normalizeGym(await getJSON<Partial<GymData> | null>(GYM_KEY, null));
+  const todayKey = dateKey(startOfDay(0));
+  const gym: GymDay[] = planGym(gymPlan, dateKey(startOfDay(-1)), dateKey(startOfDay(5)), todayKey).map((p) => ({
+    date: p.date,
+    split: p.day?.name ?? (p.status === "rest" ? "Rest" : "—"),
+    status: p.status,
+  }));
+
+  // Today's lift, from the split's rotation. Checking it off logs the workout.
+  const lift = gym.find((g) => g.date === todayKey);
+  if (lift && (lift.status === "today" || lift.status === "done")) {
+    tasks.push({
+      id: `gym:${todayKey}`,
+      title: `Lift: ${lift.split}`,
+      meta: gymPlan.split.find((d) => d.name === lift.split)?.focus.toUpperCase() ?? "GYM",
+      source: "GYM",
+      dueToday: true,
+      done: lift.status === "done",
+    });
+  }
   const first = (t: TaskItem) => (t.source === "LOGIN" ? 0 : 1);
   tasks.sort((a, b) => Number(a.done) - Number(b.done) || first(a) - first(b) || (a.due ?? "9").localeCompare(b.due ?? "9"));
 
@@ -169,16 +189,6 @@ export async function buildDashboard(): Promise<DashboardData> {
     .filter((u) => Date.now() - new Date(u.at).getTime() < 2 * 86_400_000)
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 12);
-
-  const gym: GymDay[] = Array.from({ length: 7 }, (_, i) => {
-    const day = startOfDay(i - 1);
-    const key = dateKey(day);
-    const weekday = new Date(`${key}T12:00:00Z`).getUTCDay();
-    const split = GYM_SPLIT[weekday];
-    const status: GymDay["status"] =
-      split === "Rest" ? "rest" : done[`gym:${key}`] ? "done" : i === 1 ? "today" : i === 0 ? "missed" : "planned";
-    return { date: key, split, status };
-  });
 
   // Items checked off here show as done right away, before the next sync tells Docket.
   const docketView: DocketView | null = docket && {
@@ -202,6 +212,7 @@ export async function buildDashboard(): Promise<DashboardData> {
     claude: claude.data,
     updates,
     gym,
+    gymPlan,
     notes,
     ops,
   };

@@ -5,11 +5,13 @@ import dynamic from "next/dynamic";
 import type { DashboardData, SourceStatus, TaskItem, ThreadState, UpdateItem } from "@/lib/types";
 import { CoursesView, DeenView, ExamsStrip, NoDocket, NotesView, WeekView, WorkView } from "./DocketViews";
 import { PRAYERS, PRAYER_ORDER, prayerTimes } from "@/lib/deen";
+import { planGym } from "@/lib/gym";
 import { ClaudeView } from "./ClaudeView";
 import { SchedulePanel } from "./CalendarPanel";
 import { AlertsPanel, InboxView, ReconnectBanner } from "./InboxView";
 import { AutomationsView, LoginsView, OpsAlert } from "./OpsViews";
 import { PlanView, ProjectsView, StudyView } from "./LifeViews";
+import { GymView } from "./GymView";
 
 const ProjectGraph = dynamic(() => import("./ProjectGraph").then((m) => m.ProjectGraph), {
   ssr: false,
@@ -28,6 +30,7 @@ const TABS = [
   ["week", "WEEK"],
   ["work", "SCHOOLWORK"],
   ["study", "STUDY"],
+  ["gym", "GYM"],
   ["deen", "DEEN"],
   ["notes", "NOTES"],
   ["automations", "AUTOMATIONS"],
@@ -43,6 +46,7 @@ const SOURCE_COLOR: Record<TaskItem["source"] | UpdateItem["source"], string> = 
   GMAIL: "var(--blue-soft)",
   GITHUB: "var(--silver)",
   LOGIN: "var(--red)",
+  GYM: "var(--teal)",
 };
 
 const STATE: Record<ThreadState, { label: string; color: string }> = {
@@ -121,10 +125,28 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
       await fetch("/api/logins", { method: "POST", body: JSON.stringify({ id: id.slice(6), action: "signed_in" }) });
       return refresh();
     }
+    // Workouts go to the gym log, which keeps the split's rotation in order.
+    if (id.startsWith("gym:")) {
+      const date = id.slice(4);
+      const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      const planned = planGym(data.gymPlan, date, date, todayKey)[0]?.day?.id;
+      setData((d) => ({
+        ...d,
+        tasks: d.tasks.map((t) => (t.id === id ? { ...t, done } : t)),
+        gym: d.gym.map((g) => (g.date === date ? { ...g, status: done ? "done" : "planned" } : g)),
+        gymPlan: {
+          ...d.gymPlan,
+          log: [...d.gymPlan.log.filter((l) => l.date !== date), ...(done && planned ? [{ date, dayId: planned }] : [])].sort((a, b) =>
+            a.date.localeCompare(b.date),
+          ),
+        },
+      }));
+      await fetch("/api/gym", { method: "POST", body: JSON.stringify({ date, done, dayId: planned }) });
+      return refresh();
+    }
     setData((d) => ({
       ...d,
       tasks: d.tasks.map((t) => (t.id === id ? { ...t, done } : t)),
-      gym: d.gym.map((g) => (`gym:${g.date}` === id ? { ...g, status: done ? "done" : "planned" } : g)),
       docket: d.docket && {
         ...d.docket,
         items: d.docket.items.map((i) => (`docket:${i.id}` === id ? { ...i, status: done ? "done" : "todo" } : i)),
@@ -218,6 +240,8 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
             <PlanView v={data.docket} tz={tz} now={now} onToggle={setDone} />
           ) : tab === "study" ? (
             <StudyView v={data.docket} tz={tz} now={now} />
+          ) : tab === "gym" ? (
+            <GymView plan={data.gymPlan} calendar={data.calendar.events ?? []} tz={tz} now={now} onChanged={refresh} />
           ) : tab === "deen" ? (
             <DeenView v={data.docket} tz={tz} now={now} />
           ) : !data.docket ? (
@@ -225,7 +249,7 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
           ) : tab === "courses" ? (
             <CoursesView v={data.docket} tz={tz} now={now} />
           ) : tab === "week" ? (
-            <WeekView v={data.docket} tz={tz} now={now} onToggle={setDone} />
+            <WeekView v={data.docket} tz={tz} now={now} onToggle={setDone} gym={data.gymPlan} />
           ) : tab === "work" ? (
             <WorkView v={data.docket} tz={tz} now={now} onToggle={setDone} />
           ) : (
@@ -295,7 +319,7 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
         </section>
 
         <div className="grid">
-          <TrainingPanel data={data} onToggle={setDone} />
+          <TrainingPanel data={data} onToggle={setDone} onOpen={() => go("gym")} />
           <NotesPanel initial={data.notes} />
         </div>
 
@@ -622,12 +646,17 @@ function UpdatesPanel({ updates, fresh, fmt }: { updates: UpdateItem[]; fresh: S
   );
 }
 
-function TrainingPanel({ data, onToggle }: { data: DashboardData; onToggle: (id: string, done: boolean) => void }) {
+function TrainingPanel({ data, onToggle, onOpen }: { data: DashboardData; onToggle: (id: string, done: boolean) => void; onOpen: () => void }) {
   return (
     <section className="panel" aria-labelledby="gym-title">
       <div className="panel-head">
         <h2 id="gym-title">08 · TRAINING</h2>
-        <span className="aside">TAP A DAY TO LOG IT</span>
+        <span className="aside">
+          TAP A DAY TO LOG IT ·{" "}
+          <a href="#gym" onClick={(e) => (e.preventDefault(), onOpen())} style={{ color: "var(--blue-soft)" }}>
+            FULL SPLIT →
+          </a>
+        </span>
       </div>
       <div className="gym">
         {data.gym.map((g, i) => {
@@ -639,7 +668,6 @@ function TrainingPanel({ data, onToggle }: { data: DashboardData; onToggle: (id:
               key={g.date}
               type="button"
               className={i === 1 ? "today" : ""}
-              disabled={g.status === "rest"}
               aria-pressed={g.status === "done"}
               onClick={() => onToggle(`gym:${g.date}`, g.status !== "done")}
             >

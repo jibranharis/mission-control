@@ -18,7 +18,7 @@ A personal command console for one person's day: what Claude is working on, what
 | 07 Project graph | A draggable flow chart of agent → projects → threads → sub-agents. Clicking a node with a link opens it in Claude | Claude snapshot |
 | Claude tab | A Sankey of all Claude Code usage (everything → project → model, by tokens or API value); per project a Sankey (project → model → session) and a draggable map (branches, commits, pull requests, sessions); tokens by model and by day; all threads; a GitHub showcase. Solo Kitchen is pinned first | Mac collector, GitHub, Claude snapshot |
 | Deen tab | Prayer times, the Hijri calendar, and check-offs for the five daily prayers with a 14-day history and streak (saved in the store, so laptop and phone agree) | Mission Control |
-| 08 Training | This week's split; tap a day to log it | `GYM_SPLIT`, see `lib/config.ts` |
+| 08 Training | The 5-day split's rotation; tap a day to log it | Gym tab, stored in Redis (`lib/gym.ts`) |
 | 09 Notes | A scratchpad that autosaves | Stored in the database |
 
 A source that isn't connected stays empty and is labelled **NOT CONNECTED**, so nothing on screen is ever made up. To try the dashboard with sample data instead, set `SAMPLE_DATA=1`. Data refreshes every three minutes and whenever the tab comes back into view.

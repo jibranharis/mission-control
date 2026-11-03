@@ -244,7 +244,20 @@ a.update:hover { background: var(--hover); }
 .gym button:last-child { border-right: 0; }
 .gym button:hover { background: var(--hover); }
 .gym button.today { background: var(--hover); }
-.gym .split { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; }
+.gym .split { font-family: var(--font-display); font-weight: 600; font-size: 13px; line-height: 1.2; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; overflow-wrap: anywhere; }
+.lift-name { font-family: var(--font-display); font-weight: 600; font-size: 26px; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.1; margin-bottom: 4px; }
+.lift-list { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.lift-list li::marker { font-family: var(--font-mono); color: var(--muted); }
+.gym-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.gym-select { min-height: 44px; background: var(--bg); color: var(--text); border: 1px solid var(--line-strong); padding: 0 10px; font: 13px var(--font-sans); max-width: 100%; }
+.split-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.split-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); background: var(--bg); }
+.split-card.next { border-color: var(--teal); }
+.split-card input, .split-card textarea { background: transparent; border: 1px solid var(--line-soft); color: var(--text); padding: 6px 8px; font: inherit; width: 100%; }
+.split-card input:focus, .split-card textarea:focus { border-color: var(--line-strong); outline: none; }
+.split-name { font-family: var(--font-display) !important; font-weight: 600; font-size: 16px !important; letter-spacing: 0.04em; text-transform: uppercase; }
+.split-focus { font-size: 12px !important; color: var(--text-2) !important; }
+.split-ex { font: 13px/1.6 var(--font-sans) !important; resize: vertical; }
 
 /* Notes */
 .notes { flex: 1; min-height: 180px; background: transparent; border: 0; color: var(--text); font: 15px/1.6 var(--font-sans); padding: 16px 18px; resize: vertical; outline: none; }

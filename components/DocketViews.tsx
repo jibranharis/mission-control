@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DOCKET_PREFIX, eventsOn, type DocketItem, type DocketView } from "@/lib/sources/docket";
 import { PRAYERS, PRAYER_ORDER, hijri, methodName, prayerTimes, upcomingOccasions } from "@/lib/deen";
 import { PrayerLog } from "./PrayerLog";
+import { planGym, type GymData } from "@/lib/gym";
 
 type Toggle = (id: string, done: boolean) => void;
 
@@ -205,7 +206,7 @@ export function CoursesView({ v, tz, now }: { v: DocketView; tz: string; now: Da
 
 /* ---------- Week ---------- */
 
-export function WeekView({ v, tz, now, onToggle }: { v: DocketView; tz: string; now: Date | null; onToggle: Toggle }) {
+export function WeekView({ v, tz, now, onToggle, gym }: { v: DocketView; tz: string; now: Date | null; onToggle: Toggle; gym?: GymData }) {
   const { f, key, time } = useFmt(tz);
   const [offset, setOffset] = useState(0);
   const [routine, setRoutine] = useState(false);
@@ -213,6 +214,7 @@ export function WeekView({ v, tz, now, onToggle }: { v: DocketView; tz: string; 
   const monday = addDays(today, -((new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7) + offset * 7);
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const work = allWork(v);
+  const lifts = useMemo(() => new Map((gym ? planGym(gym, days[0], days[6], today) : []).map((p) => [p.date, p])), [gym, days[0], days[6], today]);
 
   return (
     <>
@@ -249,6 +251,19 @@ export function WeekView({ v, tz, now, onToggle }: { v: DocketView; tz: string; 
                   {h.title}
                 </div>
               ))}
+              {(() => {
+                const l = lifts.get(k);
+                if (!l || !l.day || l.status === "rest") return null;
+                return (
+                  <label className={`ev due${l.status === "done" ? " done" : ""}`} style={{ borderLeftColor: "var(--teal)" }}>
+                    <span className="ev-title">
+                      <input type="checkbox" checked={l.status === "done"} onChange={(e) => onToggle(`gym:${k}`, e.target.checked)} />
+                      {l.day.name}
+                    </span>
+                    <span className="row-meta">LIFT · {l.day.focus.toUpperCase()}</span>
+                  </label>
+                );
+              })()}
               {events.map((e) => (
                 <div key={e.id} className="ev" style={{ borderLeftColor: e.kind === "class" ? "var(--blue-soft)" : e.kind === "gym" ? "var(--teal)" : "var(--silver)" }}>
                   <span className="ev-title">{e.title}</span>
@@ -269,13 +284,13 @@ export function WeekView({ v, tz, now, onToggle }: { v: DocketView; tz: string; 
                   </span>
                 </label>
               ))}
-              {!hol.length && !events.length && !due.length && <p className="day-empty">CLEAR</p>}
+              {!hol.length && !events.length && !due.length && !lifts.get(k)?.day && <p className="day-empty">CLEAR</p>}
             </section>
           );
         })}
       </div>
       <p className="footnote">
-        WEEK OF {f(`${monday}T12:00:00Z`, { month: "long", day: "numeric" }).toUpperCase()} · CLASSES, CALENDAR AND DUE DATES
+        WEEK OF {f(`${monday}T12:00:00Z`, { month: "long", day: "numeric" }).toUpperCase()} · CLASSES, CALENDAR, LIFTS AND DUE DATES
       </p>
     </>
   );
