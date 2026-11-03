@@ -1,12 +1,13 @@
 import type { ClaudeSnapshot, DashboardData, GymDay, SourceStatus, TaskItem, UpdateItem } from "@/lib/types";
-import { SAMPLE_DATA, demoCalendar, demoCanvas, demoClaude, demoGmail, emptyCalendar, emptyCanvas, emptyClaude } from "@/lib/demo";
-import { fetchCalendar, fetchGmail, googleConfigured } from "@/lib/sources/google";
+import { SAMPLE_DATA, demoCalendar, demoCanvas, demoClaude, demoMail, emptyCalendar, emptyCanvas, emptyClaude } from "@/lib/demo";
+import { accountStatuses, calendarData, fetchCalendar, googleClientConfigured, listAccounts } from "@/lib/sources/google";
+import { claudeConfigured, fetchMail } from "@/lib/mail";
 import { fetchCanvas } from "@/lib/sources/canvas";
 import { fetchGitHub } from "@/lib/sources/github";
 import { mergeProjects } from "@/lib/claude";
 import { getJSON, KEYS } from "@/lib/store";
 import { GYM_SPLIT } from "@/lib/config";
-import { DOCKET_PREFIX, docketCalendar, type DocketView } from "@/lib/sources/docket";
+import { DOCKET_PREFIX, docketBlocks, docketCalendar, type DocketView } from "@/lib/sources/docket";
 import { TIMEZONE, dateKey, isToday, startOfDay } from "@/lib/time";
 import { buildOps } from "@/lib/ops";
 
@@ -44,17 +45,31 @@ const timeFmt = (iso: string) =>
 
 export async function buildDashboard(): Promise<DashboardData> {
   const docket = await getJSON<DocketView | null>(KEYS.docket, null);
-  // Google Calendar directly when it's set up, otherwise the calendar and schedule Docket's sync carried over.
-  const loadCalendar = googleConfigured ? fetchCalendar : async () => (docket ? docketCalendar(docket) : null);
-  const [calendar, gmail, canvas, claude, todos, done, notes, github, ops] = await Promise.all([
+  const googleConfigured = googleClientConfigured && (await listAccounts()).some((a) => !a.needsReconnect);
+  // Google Calendar directly when an account is connected (with Docket's class schedule on top),
+  // otherwise the calendar and schedule Docket's sync carried over.
+  const loadCalendar = googleConfigured
+    ? async () => {
+        const g = await fetchCalendar().catch((err) => {
+          if (!docket) throw err;
+          console.error(err);
+          return null;
+        });
+        if (!docket) return g;
+        if (!g) return docketCalendar(docket);
+        return calendarData([...(g.events ?? []), ...docketBlocks(docket)].sort((a, b) => a.start.localeCompare(b.start)));
+      }
+    : async () => (docket ? docketCalendar(docket) : null);
+  const [calendar, gmail, canvas, claude, todos, done, notes, github, accounts, ops] = await Promise.all([
     resolve(googleConfigured || Boolean(docket), loadCalendar, emptyCalendar, demoCalendar),
-    resolve(googleConfigured, fetchGmail, () => [], demoGmail),
+    resolve(googleConfigured, fetchMail, () => [], () => []),
     resolve(true, async () => (await fetchCanvas())?.data ?? null, emptyCanvas, demoCanvas),
     resolve(true, () => getJSON<ClaudeSnapshot | null>(KEYS.claude, null), emptyClaude, demoClaude),
     getJSON<Todo[]>(KEYS.todos, []),
     getJSON<Record<string, string>>(KEYS.done, {}),
     getJSON<string>(KEYS.notes, ""),
     fetchGitHub(),
+    accountStatuses(),
     buildOps(),
   ]);
 
@@ -137,7 +152,7 @@ export async function buildDashboard(): Promise<DashboardData> {
   const first = (t: TaskItem) => (t.source === "LOGIN" ? 0 : 1);
   tasks.sort((a, b) => Number(a.done) - Number(b.done) || first(a) - first(b) || (a.due ?? "9").localeCompare(b.due ?? "9"));
 
-  const updates: UpdateItem[] = [...canvas.data.updates, ...gmail.data, ...claude.data.updates]
+  const updates: UpdateItem[] = [...canvas.data.updates, ...claude.data.updates]
     .filter((u) => Date.now() - new Date(u.at).getTime() < 2 * 86_400_000)
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 12);
@@ -166,6 +181,10 @@ export async function buildDashboard(): Promise<DashboardData> {
     sources: { calendar: calendar.status, gmail: gmail.status, canvas: canvas.status, claude: claude.status },
     tasks,
     calendar: calendar.data,
+    mail:
+      SAMPLE_DATA && !accounts.length
+        ? demoMail()
+        : { alerts: gmail.data, accounts, canConnect: googleClientConfigured, claude: claudeConfigured },
     canvas: canvas.data,
     claude: claude.data,
     updates,

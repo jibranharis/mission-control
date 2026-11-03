@@ -141,7 +141,15 @@ export function docketCalendar(v: DocketView): CalendarData {
     const key = dateKey(startOfDay(i));
     return { date: key, count: eventsOn(v, key).filter((e) => !e.routine).length };
   });
-  return { today: eventsOn(v, dateKey(startOfDay(0))), week };
+  const events = Array.from({ length: 14 }, (_, i) => eventsOn(v, dateKey(startOfDay(i)))).flat();
+  return { today: eventsOn(v, dateKey(startOfDay(0))), week, events };
+}
+
+/** Docket's weekly class and routine blocks for the next two weeks, without the Google events its sync copied. */
+export function docketBlocks(v: DocketView): CalendarEvent[] {
+  return Array.from({ length: 14 }, (_, i) => eventsOn(v, dateKey(startOfDay(i))))
+    .flat()
+    .filter((e) => !e.id.startsWith("gcal:"));
 }
 
 export function docketToCanvas(s: DocketSnapshot): CanvasData {

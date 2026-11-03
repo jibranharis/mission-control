@@ -11,7 +11,7 @@ if (!clientId || !clientSecret) {
 const port = 53682;
 const redirectUri = `http://127.0.0.1:${port}`;
 const scopes = [
-  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/gmail.readonly",
 ];
 

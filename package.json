@@ -11,10 +11,12 @@
     "google-auth": "node scripts/google-auth.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.4.0",
     "@xyflow/react": "12.8.4",
     "next": "15.5.28",
     "react": "19.1.1",
-    "react-dom": "19.1.1"
+    "react-dom": "19.1.1",
+    "zod": "4.1.12"
   },
   "devDependencies": {
     "@types/node": "22.18.6",

@@ -9,11 +9,12 @@ A personal command console for one person's day: what Claude is working on, what
 | Panel | Shows | Source |
 | --- | --- | --- |
 | 01 Today | One checklist that merges Canvas work due today, calendar items, Claude threads waiting on you, and your own to-dos | Everything below, plus to-dos you add here |
-| 02 Schedule | A seven-day strip and an hour-by-hour timeline for today with a live "now" line | Google Calendar |
+| 02 Schedule | A seven-day strip (tap a day to see it) and a scrolling hour-by-hour timeline with a live "now" line. Click an event to edit or delete it, or an empty slot to add one; changes go straight to Google Calendar | Google Calendar (every connected account), plus Docket's class schedule |
+| Inbox · Needs you | Important mail from every connected account, read and summarised by Claude, with one-click **Add to calendar** for anything with a date | Gmail |
 | 03 Canvas | Assignments for the next week and current course grades | Canvas API, or a scraper that pushes snapshots |
 | 04 Claude · Live | Threads that are running, waiting on you, or recently finished | Claude snapshot |
 | 05 Usage | Session and weekly limit bars, share of usage by project, and messages per day | Claude snapshot |
-| 06 Updates | New grades, mail, PRs, and finished Claude work from the last two days | Gmail, Canvas, Claude snapshot |
+| 06 Updates | New grades, PRs, and finished Claude work from the last two days | Canvas, Claude snapshot |
 | 07 Project graph | A draggable flow chart of agent → projects → threads → sub-agents. Clicking a node with a link opens it in Claude | Claude snapshot |
 | Claude tab | A Sankey of all Claude Code usage (everything → project → model, by tokens or API value); per project a Sankey (project → model → session) and a draggable map (branches, commits, pull requests, sessions); tokens by model and by day; all threads; a GitHub showcase. Solo Kitchen is pinned first | Mac collector, GitHub, Claude snapshot |
 | Deen tab | Prayer times, the Hijri calendar, and check-offs for the five daily prayers with a 14-day history and streak (saved in the store, so laptop and phone agree) | Mission Control |
@@ -42,13 +43,16 @@ The code is public, but none of your data is: grades, mail, and calendar entries
 
 ## Connecting sources
 
-**Google Calendar and Gmail (read-only).** In [Google Cloud Console](https://console.cloud.google.com/), create a project, enable the Google Calendar API and the Gmail API, set up the OAuth consent screen (External, add yourself as a test user), and create an OAuth client of type *Desktop app*. Then:
+**Google Calendar and Gmail (two-way calendar, read-only mail, several accounts).** In [Google Cloud Console](https://console.cloud.google.com/):
 
-```bash
-GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... npm run google-auth
-```
+1. Create a project and enable the **Google Calendar API** and the **Gmail API**.
+2. Set up the OAuth consent screen (External), add your addresses as test users, then **Publish app** so sign-ins don't expire every 7 days. Google will warn that the app is unverified; that's expected for a personal app.
+3. Create an OAuth client of type **Web application** with the authorized redirect URI `https://<your-app>/api/google/callback`.
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, redeploy, then open the **Inbox** tab and press **Connect a Google account** once for each account.
 
-Sign in when the URL opens, and copy the printed `GOOGLE_REFRESH_TOKEN` into your environment along with the client ID and secret.
+Mission Control asks for `calendar` (read and edit events) and `gmail.readonly` (it never sends, archives or deletes mail). Each account's refresh token is stored in the database. Calendar edits made here are written to Google immediately; changes made in Google show up on the next refresh. If Google signs an account out, a **Sign in again** banner appears on the home page.
+
+Set `ANTHROPIC_API_KEY` and Claude reads each new email once to decide whether it needs you, summarise it, and pull out any date worth adding to the calendar (calendar invites are read directly). Without a key, simple rules do the sorting.
 
 **Canvas.** In Canvas, open **Account → Settings → New Access Token**, then set `CANVAS_BASE_URL` (for example `https://canvas.ucdavis.edu`) and `CANVAS_TOKEN`. If you'd rather keep using a scraper, leave those blank and have it push to the ingest endpoint instead.
 

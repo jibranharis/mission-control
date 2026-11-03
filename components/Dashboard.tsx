@@ -6,6 +6,8 @@ import type { DashboardData, SourceStatus, TaskItem, ThreadState, UpdateItem } f
 import { CoursesView, DeenView, ExamsStrip, NoDocket, NotesView, WeekView, WorkView } from "./DocketViews";
 import { PRAYERS, PRAYER_ORDER, prayerTimes } from "@/lib/deen";
 import { ClaudeView } from "./ClaudeView";
+import { SchedulePanel } from "./CalendarPanel";
+import { AlertsPanel, InboxView, ReconnectBanner } from "./InboxView";
 import { AutomationsView, LoginsView, OpsAlert } from "./OpsViews";
 import { PlanView, ProjectsView, StudyView } from "./LifeViews";
 
@@ -18,6 +20,7 @@ const REFRESH_MS = 3 * 60_000;
 
 const TABS = [
   ["today", "TODAY"],
+  ["inbox", "INBOX"],
   ["claude", "CLAUDE"],
   ["projects", "PROJECTS"],
   ["plan", "PLAN"],
@@ -50,7 +53,6 @@ const STATE: Record<ThreadState, { label: string; color: string }> = {
   idle: { label: "IDLE", color: "var(--muted)" },
 };
 
-const EVENT_COLOR = { class: "var(--blue-soft)", gym: "var(--teal)", focus: "var(--silver)", other: "var(--amber)" };
 const SPLIT_COLORS = ["var(--blue)", "var(--silver)", "var(--amber)", "var(--teal)", "var(--slate)"];
 
 function useNow(intervalMs = 1000) {
@@ -201,7 +203,9 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
 
       {tab !== "today" && (
         <main className="main">
-          {tab === "claude" ? (
+          {tab === "inbox" ? (
+            <InboxView data={data} fmt={fmt} onChanged={refresh} />
+          ) : tab === "claude" ? (
             <ClaudeView data={data} fmt={fmt} now={now} />
           ) : tab === "automations" ? (
             <AutomationsView ops={data.ops} now={now} fmt={fmt} />
@@ -253,13 +257,16 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
           </div>
         </section>
 
+        <ReconnectBanner data={data} />
         <OpsAlert ops={data.ops} now={now} onGo={go} onChanged={refresh} />
 
         {data.docket && <ExamsStrip v={data.docket} tz={tz} now={now} />}
 
+        <AlertsPanel data={data} fmt={fmt} onChanged={refresh} onOpenInbox={() => go("inbox")} />
+
         <div className="grid">
           <TodayPanel tasks={data.tasks} onToggle={setDone} onAdded={refresh} />
-          <SchedulePanel data={data} now={now} fmt={fmt} />
+          <SchedulePanel data={data} now={now} fmt={fmt} onChanged={refresh} />
           <CanvasPanel data={data} now={now} fmt={fmt} />
         </div>
 
@@ -378,86 +385,6 @@ function TodayPanel({
           </span>
         </label>
       ))}
-    </section>
-  );
-}
-
-const DAY_START = 6;
-const DAY_END = 23;
-
-function SchedulePanel({ data, now, fmt }: { data: DashboardData; now: Date | null; fmt: Fmt }) {
-  const hourOf = (iso: string) => {
-    const [h, m] = fmt(iso, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).split(":").map(Number);
-    return h + m / 60;
-  };
-  const pct = (h: number) => ((Math.min(Math.max(h, DAY_START), DAY_END) - DAY_START) / (DAY_END - DAY_START)) * 100;
-  // Routine blocks (prayer, meals) stay off the timeline; gym stays on.
-  const timed = data.calendar.today.filter((e) => !e.allDay && (!e.routine || e.kind === "gym"));
-  const allDay = data.calendar.today.filter((e) => e.allDay);
-  const hours = [];
-  for (let h = DAY_START; h < DAY_END; h += 2) hours.push(h);
-
-  return (
-    <section className="panel" aria-labelledby="schedule-title">
-      <div className="panel-head">
-        <h2 id="schedule-title">02 · SCHEDULE</h2>
-        <span className="aside">
-          GOOGLE CALENDAR <SourceBadge status={data.sources.calendar} />
-        </span>
-      </div>
-      <div className="week">
-        {data.calendar.week.map((d, i) => {
-          const date = new Date(`${d.date}T12:00:00Z`);
-          return (
-            <div key={d.date} className={`week-day${i === 0 ? " today" : ""}`}>
-              <span className="dow">{date.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).toUpperCase()}</span>
-              <span className="num">{date.getUTCDate()}</span>
-              <span className={`load${d.count >= 4 ? " heavy" : ""}`}>{d.count ? `${d.count} EVT` : "CLEAR"}</span>
-            </div>
-          );
-        })}
-      </div>
-      {allDay.length > 0 && (
-        <div className="allday">
-          {allDay.map((e) => (
-            <span key={e.id} className="badge">
-              {e.title}
-            </span>
-          ))}
-        </div>
-      )}
-      {data.sources.calendar === "off" && <p className="empty">Google Calendar isn&apos;t connected yet.</p>}
-      <div className="timeline">
-        {hours.map((h) => (
-          <div key={h} className="hour" style={{ top: `${pct(h)}%` }}>
-            <span>
-              {h % 12 || 12}
-              {h < 12 ? "A" : "P"}
-            </span>
-          </div>
-        ))}
-        {timed.map((e) => {
-          const top = pct(hourOf(e.start));
-          const height = Math.max(pct(hourOf(e.end)) - top, 4);
-          return (
-            <a
-              key={e.id}
-              className="event"
-              title={`${e.title}, ${fmt(e.start, { hour: "numeric", minute: "2-digit" })} to ${fmt(e.end, { hour: "numeric", minute: "2-digit" })}`}
-              href={e.url}
-              target="_blank"
-              rel="noreferrer"
-              style={{ top: `${top}%`, height: `calc(${height}% - 3px)`, borderLeftColor: EVENT_COLOR[e.kind] }}
-            >
-              <div className="event-title">{e.title}</div>
-              {hourOf(e.end) - hourOf(e.start) >= 1.5 && <div className="event-time">
-                {fmt(e.start, { hour: "numeric", minute: "2-digit" })} to {fmt(e.end, { hour: "numeric", minute: "2-digit" })}
-              </div>}
-            </a>
-          );
-        })}
-        {now && <div className="now-line" style={{ top: `${pct(hourOf(now.toISOString()))}%` }} aria-hidden="true" />}
-      </div>
     </section>
   );
 }
