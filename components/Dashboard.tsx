@@ -6,6 +6,7 @@ import type { DashboardData, SourceStatus, TaskItem, ThreadState, UpdateItem } f
 import { CoursesView, DeenView, ExamsStrip, NoDocket, NotesView, WeekView, WorkView } from "./DocketViews";
 import { PRAYERS, PRAYER_ORDER, prayerTimes } from "@/lib/deen";
 import { ClaudeView } from "./ClaudeView";
+import { AutomationsView, LoginsView, OpsAlert } from "./OpsViews";
 import { PlanView, ProjectsView, StudyView } from "./LifeViews";
 
 const ProjectGraph = dynamic(() => import("./ProjectGraph").then((m) => m.ProjectGraph), {
@@ -26,6 +27,8 @@ const TABS = [
   ["study", "STUDY"],
   ["deen", "DEEN"],
   ["notes", "NOTES"],
+  ["automations", "AUTOMATIONS"],
+  ["logins", "LOGINS"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -36,6 +39,7 @@ const SOURCE_COLOR: Record<TaskItem["source"] | UpdateItem["source"], string> = 
   CLAUDE: "var(--teal)",
   GMAIL: "var(--blue-soft)",
   GITHUB: "var(--silver)",
+  LOGIN: "var(--red)",
 };
 
 const STATE: Record<ThreadState, { label: string; color: string }> = {
@@ -108,6 +112,12 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
   }, [refresh]);
 
   const setDone = async (id: string, done: boolean) => {
+    // Checking off a re-login says you signed back in; the next run confirms it.
+    if (id.startsWith("login:")) {
+      if (!done) return;
+      await fetch("/api/logins", { method: "POST", body: JSON.stringify({ id: id.slice(6), action: "signed_in" }) });
+      return refresh();
+    }
     setData((d) => ({
       ...d,
       tasks: d.tasks.map((t) => (t.id === id ? { ...t, done } : t)),
@@ -127,6 +137,7 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
   const overdue = open.filter((t) => t.meta === "OVERDUE").length;
   const running = data.claude.threads.filter((t) => t.state === "running" || t.state === "needs_you");
   const degraded = Object.entries(data.sources).filter(([, s]) => s === "error");
+  const relogins = data.ops.logins.filter((l) => l.needsYou).length;
   const prayer = useMemo(() => {
     if (!now) return null;
     const key = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
@@ -153,8 +164,16 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
             {now ? fmt(now.toISOString(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }) : "--:--:--"}
           </span>
           <span className="status">
-            <span className="live-dot" style={{ background: degraded.length ? "var(--amber)" : "var(--teal)" }} />
-            {degraded.length ? `${degraded.length} SOURCE${degraded.length > 1 ? "S" : ""} DEGRADED` : "ALL SYSTEMS NOMINAL"}
+            <span className="live-dot" style={{ background: relogins ? "var(--red)" : degraded.length ? "var(--amber)" : "var(--teal)" }} />
+            {relogins ? (
+              <a href="#logins" onClick={(e) => (e.preventDefault(), go("logins"))} style={{ color: "var(--red)" }}>
+                {relogins} RE-LOGIN{relogins > 1 ? "S" : ""} NEEDED
+              </a>
+            ) : degraded.length ? (
+              `${degraded.length} SOURCE${degraded.length > 1 ? "S" : ""} DEGRADED`
+            ) : (
+              "ALL SYSTEMS NOMINAL"
+            )}
           </span>
           {prayer && (
             <a href="#deen" onClick={(e) => (e.preventDefault(), go("deen"))}>
@@ -184,6 +203,10 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
         <main className="main">
           {tab === "claude" ? (
             <ClaudeView data={data} fmt={fmt} now={now} />
+          ) : tab === "automations" ? (
+            <AutomationsView ops={data.ops} now={now} fmt={fmt} />
+          ) : tab === "logins" ? (
+            <LoginsView ops={data.ops} now={now} onChanged={refresh} />
           ) : tab === "projects" ? (
             <ProjectsView tz={tz} now={now} />
           ) : tab === "plan" ? (
@@ -229,6 +252,8 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
             </a>
           </div>
         </section>
+
+        <OpsAlert ops={data.ops} now={now} onGo={go} onChanged={refresh} />
 
         {data.docket && <ExamsStrip v={data.docket} tz={tz} now={now} />}
 

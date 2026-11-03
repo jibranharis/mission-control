@@ -83,6 +83,14 @@ curl -fsSL https://raw.githubusercontent.com/jibranharis/mission-control/main/sc
 
 **GitHub showcase.** Set `GITHUB_USERS` (comma-separated logins) and the Claude page lists those users' public repositories. Without a token the six most recent public repositories get flow charts; add a `GITHUB_TOKEN` (fine-grained, read-only) to include private repositories and chart up to twelve.
 
+## Automations and logins
+
+Every automated job reports its runs to `POST /api/ingest/run` (same `INGEST_TOKEN`), with the
+sites it signed in to. The **Automations** tab lists each job's health and a run log; the
+**Logins** tab lists every account the jobs use. A login reported as `expired` becomes the top
+to-do on Today until a later run confirms it. Docket and Claude collector pushes are logged
+automatically. See `app/api/ingest/run/route.ts` for the body.
+
 ## Stack
 
 Next.js (App Router) and TypeScript, [React Flow](https://reactflow.dev) for the project graph, hand-drawn CSS for every chart, and Upstash Redis over REST for storage. There's no UI kit and no chart library. Type is Barlow, Barlow Condensed, and IBM Plex Mono.

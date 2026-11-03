@@ -8,6 +8,7 @@ import { getJSON, KEYS } from "@/lib/store";
 import { GYM_SPLIT } from "@/lib/config";
 import { DOCKET_PREFIX, docketCalendar, type DocketView } from "@/lib/sources/docket";
 import { TIMEZONE, dateKey, isToday, startOfDay } from "@/lib/time";
+import { buildOps } from "@/lib/ops";
 
 export interface Todo {
   id: string;
@@ -45,7 +46,7 @@ export async function buildDashboard(): Promise<DashboardData> {
   const docket = await getJSON<DocketView | null>(KEYS.docket, null);
   // Google Calendar directly when it's set up, otherwise the calendar and schedule Docket's sync carried over.
   const loadCalendar = googleConfigured ? fetchCalendar : async () => (docket ? docketCalendar(docket) : null);
-  const [calendar, gmail, canvas, claude, todos, done, notes, github] = await Promise.all([
+  const [calendar, gmail, canvas, claude, todos, done, notes, github, ops] = await Promise.all([
     resolve(googleConfigured || Boolean(docket), loadCalendar, emptyCalendar, demoCalendar),
     resolve(googleConfigured, fetchGmail, () => [], demoGmail),
     resolve(true, async () => (await fetchCanvas())?.data ?? null, emptyCanvas, demoCanvas),
@@ -54,6 +55,7 @@ export async function buildDashboard(): Promise<DashboardData> {
     getJSON<Record<string, string>>(KEYS.done, {}),
     getJSON<string>(KEYS.notes, ""),
     fetchGitHub(),
+    buildOps(),
   ]);
 
   // GitHub fills in repositories and projects the Mac collector hasn't sent; pushed ones win.
@@ -120,7 +122,20 @@ export async function buildDashboard(): Promise<DashboardData> {
       done: isDone,
     });
   }
-  tasks.sort((a, b) => Number(a.done) - Number(b.done) || (a.due ?? "9").localeCompare(b.due ?? "9"));
+  // Sign-ins that broke come first: every automation behind them is stuck until they're redone.
+  for (const l of ops.logins.filter((l) => l.needsYou)) {
+    tasks.push({
+      id: `login:${l.id}`,
+      title: `Sign back in to ${l.name}`,
+      meta: `RE-LOGIN NEEDED${l.usedBy.length ? ` · BLOCKS ${l.usedBy.length} AUTOMATION${l.usedBy.length > 1 ? "S" : ""}` : ""}`,
+      source: "LOGIN",
+      dueToday: true,
+      done: false,
+      url: l.loginUrl,
+    });
+  }
+  const first = (t: TaskItem) => (t.source === "LOGIN" ? 0 : 1);
+  tasks.sort((a, b) => Number(a.done) - Number(b.done) || first(a) - first(b) || (a.due ?? "9").localeCompare(b.due ?? "9"));
 
   const updates: UpdateItem[] = [...canvas.data.updates, ...gmail.data, ...claude.data.updates]
     .filter((u) => Date.now() - new Date(u.at).getTime() < 2 * 86_400_000)
@@ -156,5 +171,6 @@ export async function buildDashboard(): Promise<DashboardData> {
     updates,
     gym,
     notes,
+    ops,
   };
 }

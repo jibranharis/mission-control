@@ -14,3 +14,10 @@ export function safeEqual(a: string, b: string): boolean {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
+
+/** True when a request carries `Authorization: Bearer $INGEST_TOKEN`, for jobs that report in. */
+export function ingestAuthorized(req: Request): boolean {
+  const secret = process.env.INGEST_TOKEN;
+  const given = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  return Boolean(secret) && safeEqual(given, secret!);
+}
