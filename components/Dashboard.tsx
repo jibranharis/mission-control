@@ -13,9 +13,9 @@ import { AutomationsView, LoginsView, OpsAlert } from "./OpsViews";
 import { PlanView, ProjectsView, StudyView } from "./LifeViews";
 import { GymView } from "./GymView";
 import { WaitingPanel } from "./WaitingPanel";
-import { waitingOnYou } from "@/lib/claude";
+import { waitingOnYou, withPinned } from "@/lib/claude";
 
-const ProjectGraph = dynamic(() => import("./ProjectGraph").then((m) => m.ProjectGraph), {
+const OverviewGraph = dynamic(() => import("./OverviewGraph").then((m) => m.OverviewGraph), {
   ssr: false,
   loading: () => <div className="graph" />,
 });
@@ -334,8 +334,8 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
               <SourceBadge status={data.sources.claude} />
             </span>
           </div>
-          {data.claude.graph.nodes.length ? (
-            <ProjectGraph graph={data.claude.graph} />
+          {data.claude.threads.length || (data.claude.projects ?? []).length ? (
+            <OverviewGraph projects={withPinned(data.claude.projects ?? [])} threads={data.claude.threads} />
           ) : (
             <p className="empty">No Claude feed yet. Your projects and threads show up here once it's connected.</p>
           )}
