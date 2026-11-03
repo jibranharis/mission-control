@@ -26,6 +26,15 @@ export interface CalendarEvent {
   location?: string;
   /** Daily routine (prayer, meals, gym) rather than something to act on. */
   routine?: boolean;
+  description?: string;
+  /** Google account and calendar the event lives on; set only for Google events. */
+  account?: string;
+  calendarId?: string;
+  calendarName?: string;
+  /** True when Mission Control can edit or delete it in Google Calendar. */
+  editable?: boolean;
+  /** One occurrence of a repeating event; edits change only this occurrence. */
+  recurring?: boolean;
 }
 
 export interface WeekDay {
@@ -57,6 +66,60 @@ export interface CanvasData {
 export interface CalendarData {
   today: CalendarEvent[];
   week: WeekDay[];
+  /** Every event for the next two weeks, for picking another day on the schedule. */
+  events?: CalendarEvent[];
+}
+
+export interface GoogleAccountStatus {
+  email: string;
+  label: string;
+  status: "ok" | "reconnect";
+  detail?: string;
+}
+
+/** A calendar item found in an email, ready to add with one click. */
+export interface MailEvent {
+  title: string;
+  /** YYYY-MM-DD, local */
+  date: string;
+  /** HH:MM, local; absent for all-day. */
+  start?: string;
+  end?: string;
+  allDay: boolean;
+  location?: string;
+}
+
+export type MailState = "new" | "done" | "dismissed" | "added";
+
+/** An email worth a look, with Claude's read of it. */
+export interface MailAlert {
+  id: string;
+  account: string;
+  accountLabel: string;
+  from: string;
+  subject: string;
+  snippet: string;
+  at: string;
+  url: string;
+  importance: "high" | "normal" | "low";
+  category: "deadline" | "action" | "event" | "update" | "info";
+  summary: string;
+  action?: string;
+  event?: MailEvent;
+  /** "claude" when Claude triaged it, "rules" for the built-in fallback. */
+  triagedBy: "claude" | "rules";
+  state: MailState;
+  /** Link to the calendar event made from this email. */
+  eventUrl?: string;
+}
+
+export interface MailData {
+  alerts: MailAlert[];
+  accounts: GoogleAccountStatus[];
+  /** Google OAuth client set up on the server (GOOGLE_CLIENT_ID / SECRET). */
+  canConnect: boolean;
+  /** ANTHROPIC_API_KEY set, so Claude reads the mail. */
+  claude: boolean;
 }
 
 export interface UpdateItem {
@@ -191,6 +254,7 @@ export interface DashboardData {
   sources: Record<"calendar" | "gmail" | "canvas" | "claude", SourceStatus>;
   tasks: TaskItem[];
   calendar: CalendarData;
+  mail: MailData;
   canvas: CanvasData;
   claude: ClaudeSnapshot;
   updates: UpdateItem[];
