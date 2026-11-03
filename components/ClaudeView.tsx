@@ -74,7 +74,7 @@ export function ClaudeView({ data, fmt, now }: { data: DashboardData; fmt: Fmt; 
       <section className="panel" aria-labelledby="map-title">
         <div className="panel-head">
           <h2 id="map-title">MAP · EVERY PROJECT AND THREAD</h2>
-          <span className="aside">FINISHED THREADS FOLD UP · CLICK A FOLD TO OPEN IT · DRAG TO REARRANGE</span>
+          <span className="aside">EVERY THREAD · FINISHED ONES DIMMED · CLICK ONE TO OPEN IT</span>
         </div>
         <OverviewGraph projects={projects} threads={c.threads} />
       </section>
