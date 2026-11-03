@@ -96,9 +96,18 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
     [tz],
   );
 
+  const buildRef = useRef<string | null>(null);
   const refresh = useCallback(async () => {
     const res = await fetch("/api/dashboard", { cache: "no-store" });
     if (!res.ok) return;
+    const build = res.headers.get("x-build");
+    if (build) {
+      if (buildRef.current && buildRef.current !== build) {
+        location.reload();
+        return;
+      }
+      buildRef.current = build;
+    }
     const next = (await res.json()) as DashboardData;
     setData((prev) => {
       const seen = new Set(prev.updates.map((u) => u.id));
@@ -480,7 +489,9 @@ function ThreadsPanel({ data, running }: { data: DashboardData; running: number 
           {running} ACTIVE <SourceBadge status={data.sources.claude} />
         </span>
       </div>
-      {data.claude.threads.length === 0 && <p className="empty">No threads yet.</p>}
+      {homeThreads(data.claude.threads).length === 0 && (
+        <p className="empty">Nothing running right now.</p>
+      )}
       {homeThreads(data.claude.threads).map((t) => {
         const s = STATE[t.state];
         const body = (
@@ -511,10 +522,10 @@ function ThreadsPanel({ data, running }: { data: DashboardData; running: number 
           </div>
         );
       })}
-      {data.claude.threads.length > HOME_THREADS && (
+      {data.claude.threads.length > 0 && (
         <a className="row thread" href="#claude">
           <span className="row-meta" style={{ color: "var(--blue-soft)" }}>
-            ALL {data.claude.threads.length} SESSIONS ON THE CLAUDE TAB →
+            ALL SESSIONS ON THE CLAUDE TAB →
           </span>
         </a>
       )}
@@ -524,10 +535,9 @@ function ThreadsPanel({ data, running }: { data: DashboardData; running: number 
 
 const HOME_THREADS = 3;
 
-/** Home shows what's live or waiting on you; with nothing live, the latest few. The full list is on the Claude tab. */
+/** Home shows only sessions that are running or waiting on you (at most a few). Everything else lives on the Claude tab. */
 function homeThreads(threads: DashboardData["claude"]["threads"]) {
-  const live = threads.filter((t) => t.state === "running" || t.state === "needs_you");
-  return (live.length ? live : threads).slice(0, HOME_THREADS);
+  return threads.filter((t) => t.state === "running" || t.state === "needs_you").slice(0, HOME_THREADS);
 }
 
 function UsagePanel({ data, fmt, now }: { data: DashboardData; fmt: Fmt; now: Date | null }) {
