@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DOCKET_PREFIX, eventsOn, type DocketItem, type DocketView } from "@/lib/sources/docket";
 import { PRAYERS, PRAYER_ORDER, hijri, methodName, prayerTimes, upcomingOccasions } from "@/lib/deen";
+import { PrayerLog } from "./PrayerLog";
 
 type Toggle = (id: string, done: boolean) => void;
 
@@ -382,6 +383,7 @@ export function DeenView({ v, tz, now }: { v: DocketView | null; tz: string; now
       <div className="view-head">
         <h1>Deen</h1>
       </div>
+      <PrayerLog today={today} tz={tz} method={method} now={now} time={time} />
       <div className="grid">
         <section className="panel">
           <div className="panel-head">

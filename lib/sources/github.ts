@@ -13,6 +13,8 @@ export const githubConfigured = USERS.length > 0;
 const API = "https://api.github.com";
 const TTL = TOKEN ? 10 * 60_000 : 30 * 60_000;
 const GRAPH_REPOS = 12;
+/** Without a token GitHub allows 60 requests an hour, so fewer flow charts. */
+const GRAPH_REPOS_PUBLIC = 6;
 
 interface Cached {
   at: string;
@@ -144,8 +146,8 @@ export async function fetchGitHub(): Promise<Cached | null> {
       homepage: r.homepage || undefined,
       topics: r.topics,
     }));
-    // Flow charts need many requests, so only with a token and only for the most recent repos.
-    const projects = TOKEN ? await Promise.all(all.slice(0, GRAPH_REPOS).map(projectFor)) : [];
+    // Flow charts take two requests each, so only for the most recent repos.
+    const projects = await Promise.all(all.slice(0, TOKEN ? GRAPH_REPOS : GRAPH_REPOS_PUBLIC).map(projectFor));
     const fresh = { at: new Date().toISOString(), repos, projects };
     await setJSON(KEYS.github, fresh);
     return fresh;

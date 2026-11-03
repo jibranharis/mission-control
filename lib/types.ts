@@ -135,6 +135,15 @@ export interface ClaudeProject {
   updatedAt?: string;
   stats: { commits?: number; openPRs?: number; mergedPRs?: number; sessions?: number; tokens?: number; cost?: number };
   graph: { nodes: GraphNode[]; edges: [string, string][] };
+  /** Claude Code usage in this project, from the Mac collector: what the flow chart is drawn from. */
+  usage?: {
+    total: TokenRow;
+    byModel: (TokenRow & { model: string })[];
+    /** Most expensive sessions first, each split by model. */
+    sessions: { id: string; title: string; tokens: number; cost: number; byModel: Record<string, { tokens: number; cost: number }>; state?: ThreadState; updatedAt?: string }[];
+  };
+  /** Shown before any data arrives, e.g. a pinned project the collector hasn't reported yet. */
+  placeholder?: boolean;
 }
 
 export interface RepoCard {
