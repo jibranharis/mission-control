@@ -436,7 +436,7 @@ function ProjectDetail({
       {threads.length > 0 && (
         <div>
           <div className="row-meta" style={{ padding: "12px 18px 4px" }}>CLAUDE THREADS IN THIS PROJECT</div>
-          {threads.slice(0, 8).map((t) => (
+          {threads.filter((t) => t.state !== "done").slice(0, 8).map((t) => (
             <ThreadRow key={t.id} t={t} fmt={fmt} />
           ))}
         </div>
@@ -473,22 +473,24 @@ function ThreadRow({ t, fmt }: { t: DashboardData["claude"]["threads"][number]; 
 }
 
 function ThreadsPanel({ data, fmt }: { data: DashboardData; fmt: Fmt }) {
-  const [filter, setFilter] = useState<"all" | ThreadState>("all");
+  const [filter, setFilter] = useState<"open" | ThreadState>("open");
   const all = data.claude.threads;
-  const shown = all.filter((t) => filter === "all" || t.state === filter);
+  const finished = all.filter((t) => t.state === "done").length;
+  const shown = all.filter((t) => (filter === "open" ? t.state !== "done" : t.state === filter));
+  const filters = ["open", "running", "needs_you", "idle", ...(finished ? (["done"] as const) : [])] as const;
   return (
     <section className="panel" aria-labelledby="all-threads-title">
       <div className="panel-head">
-        <h2 id="all-threads-title">THREADS · {all.length}</h2>
+        <h2 id="all-threads-title">THREADS · {all.length - finished}</h2>
         <div className="seg" role="group" aria-label="Filter threads">
-          {(["all", "running", "needs_you", "idle", "done"] as const).map((f) => (
+          {filters.map((f) => (
             <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)}>
-              {f === "all" ? "ALL" : STATE[f].label}
+              {f === "open" ? "OPEN" : f === "done" ? `FINISHED · ${finished}` : STATE[f].label}
             </button>
           ))}
         </div>
       </div>
-      {shown.length === 0 && <p className="empty">Nothing here yet.</p>}
+      {shown.length === 0 && <p className="empty">Nothing here.</p>}
       {shown.slice(0, 60).map((t) => (
         <ThreadRow key={t.id} t={t} fmt={fmt} />
       ))}
