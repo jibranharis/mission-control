@@ -1,4 +1,5 @@
 import { PINNED_PROJECTS } from "@/lib/config";
+import { TIMEZONE } from "@/lib/time";
 import type { ClaudeProject, ClaudeSnapshot, ClaudeThread, GraphNode, RepoCard, TokenUsage } from "@/lib/types";
 
 /** What a pusher may send; anything left out keeps what the last push set. */
@@ -38,6 +39,28 @@ export function shareByProject(threads: ClaudeThread[]): { name: string; pct: nu
     .map(([name, n]) => ({ name, pct: Math.round((n / threads.length) * 100) }));
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TITLE_MAX = 72;
+
+/**
+ * Session titles come from the first prompt, which can be a bare session id or
+ * just attached files (@"/Users/.../uploads/..."). Those get a readable title.
+ */
+export function cleanTitle(title: string | undefined, at?: string): string {
+  let t = (title ?? "")
+    .replace(/@"[^"]*"?/g, " ")
+    .replace(/@\/\S+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t || UUID.test(t) || /^(session|cse|cmsg)_[A-Za-z0-9]+$/.test(t) || !/[A-Za-z]{2}/.test(t)) {
+    const files = /@["/]/.test(title ?? "");
+    const day = at ? new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: TIMEZONE }) : null;
+    return `${files ? "Files shared" : "Session"}${day ? ` · ${day}` : ""}`;
+  }
+  if (t.length > TITLE_MAX) t = `${t.slice(0, TITLE_MAX).replace(/\s+\S*$/, "")}…`;
+  return t;
+}
+
 const RUNNING_FOR = 10 * 60_000;
 
 /** A thread's state can go stale between pushes: nothing runs for more than a few minutes unobserved. */
@@ -50,7 +73,7 @@ function settle(t: ClaudeThread): ClaudeThread {
 function mergeThreads(push: ClaudePush, prev: ClaudeThread[]): ClaudeThread[] {
   if (!Array.isArray(push.threads)) return prev.map(settle);
   const origin = push.origin ?? "cloud";
-  const incoming = push.threads.map((t) => ({ ...t, origin: t.origin ?? origin }));
+  const incoming = push.threads.map((t) => ({ ...t, title: cleanTitle(t.title, t.updatedAt), origin: t.origin ?? origin }));
   const ids = new Set(incoming.map((t) => t.id));
   const kept = prev.filter((t) => (t.origin ?? "cloud") !== origin && !ids.has(t.id));
   return [...incoming, ...kept]
@@ -61,7 +84,11 @@ function mergeThreads(push: ClaudePush, prev: ClaudeThread[]): ClaudeThread[] {
 /** Projects from the push replace the ones with the same id; pinned ones first, then most recent. */
 export function mergeProjects(incoming: ClaudeProject[] | undefined, prev: ClaudeProject[]): ClaudeProject[] {
   const byId = new Map(prev.map((p) => [p.id, p]));
-  for (const p of incoming ?? []) byId.set(p.id, p);
+  for (const p of incoming ?? []) {
+    const sessions = p.usage?.sessions.map((s) => ({ ...s, title: cleanTitle(s.title, s.updatedAt) }));
+    const nodes = p.graph?.nodes?.map((n) => (n.kind === "session" ? { ...n, label: cleanTitle(n.label) } : n));
+    byId.set(p.id, { ...p, ...(p.usage && sessions ? { usage: { ...p.usage, sessions } } : {}), ...(nodes ? { graph: { ...p.graph, nodes } } : {}) });
+  }
   return [...byId.values()].sort(
     (a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""),
   );
