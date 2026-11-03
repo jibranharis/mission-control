@@ -1,17 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { safeEqual } from "@/lib/auth";
+import { ingestAuthorized } from "@/lib/auth";
 import { getJSON, setJSON, KEYS } from "@/lib/store";
 import { DOCKET_PREFIX, docketToCanvas, toView, type DocketSnapshot } from "@/lib/sources/docket";
 import { normalizeClaude, type ClaudePush } from "@/lib/claude";
 import type { ClaudeSnapshot } from "@/lib/types";
+import { recordRun } from "@/lib/ops";
 
 export const dynamic = "force-dynamic";
 
-function authorized(req: NextRequest) {
-  const secret = process.env.INGEST_TOKEN;
-  const given = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  return Boolean(secret) && safeEqual(given, secret!);
-}
+const authorized = ingestAuthorized;
 
 const list = (v: unknown) => (Array.isArray(v) ? v : []);
 
@@ -31,11 +28,21 @@ async function saveClaude(push: ClaudePush) {
   await setJSON(KEYS.claude, snap);
 }
 
+const n = (k: number, w: string) => `${k} ${w}${k === 1 ? "" : "s"}`;
+
+function collectorSummary(b: Record<string, unknown>) {
+  const projects = list(b.projects).length;
+  const sessions = list(b.threads).length;
+  return [projects && `${projects} projects`, sessions && `${sessions} sessions`].filter(Boolean).join(", ") || "Sent Claude data";
+}
+
 /**
  * Lets outside jobs push snapshots in:
  *   POST /api/ingest/claude  body: ClaudePush (usage, threads, tokens, projects, repos; fields left out keep their last value)
  *   POST /api/ingest/docket  body: DocketSnapshot, plus an optional `claude` push (from the Docket sync tasks)
  *   POST /api/ingest/canvas  body: CanvasData
+ *   POST /api/ingest/run     body: RunReport (see app/api/ingest/run/route.ts)
+ * Each Claude and Docket push is also logged as a run on the Automations page.
  * Authenticated with `Authorization: Bearer $INGEST_TOKEN`.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ source: string }> }) {
@@ -50,6 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sou
     case "claude":
       if (!CLAUDE_FIELDS.some((k) => k in b)) return NextResponse.json({ error: `expected one of ${CLAUDE_FIELDS.join(", ")}` }, { status: 422 });
       await saveClaude(b as ClaudePush);
+      await recordRun({ automation: "claude-collector", summary: collectorSummary(b) }, { auto: true });
       break;
     case "docket": {
       if (!Array.isArray(b.items)) return NextResponse.json({ error: "expected items" }, { status: 422 });
@@ -57,6 +65,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sou
       await setJSON(KEYS.canvas, docketToCanvas(docket));
       await setJSON(KEYS.docket, toView(docket, new Date().toISOString()));
       if (claude && typeof claude === "object") await saveClaude(claude);
+      await recordRun(
+        { automation: "docket-sync", summary: `Sent ${n(docket.items.length, "item")}, ${n(docket.tasks?.length ?? 0, "task")}, ${n(docket.calendar?.length ?? 0, "event")}` },
+        { auto: true },
+      );
       break;
     }
     case "canvas":

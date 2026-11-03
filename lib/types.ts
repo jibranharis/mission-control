@@ -1,7 +1,7 @@
 /** live: real data. off: not connected yet. demo: sample data (SAMPLE_DATA=1). */
 export type SourceStatus = "live" | "off" | "demo" | "error";
 
-export type TaskSource = "CANVAS" | "CAL" | "TODO" | "CLAUDE" | "GMAIL";
+export type TaskSource = "CANVAS" | "CAL" | "TODO" | "CLAUDE" | "GMAIL" | "LOGIN";
 
 export interface TaskItem {
   id: string;
@@ -196,4 +196,6 @@ export interface DashboardData {
   updates: UpdateItem[];
   gym: GymDay[];
   notes: string;
+  /** Automations, their runs, and the logins they depend on. */
+  ops: import("@/lib/ops").OpsView;
 }
