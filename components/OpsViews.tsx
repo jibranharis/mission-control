@@ -105,8 +105,8 @@ function LoginRow({ l, now, onChanged, compact, names = {} }: { l: LoginView; no
           {s.label}
         </span>
         {l.loginUrl && (
-          <a className="btn btn-sm" href={l.loginUrl} target="_blank" rel="noreferrer">
-            {l.live ? (l.status === "ok" ? "RECONNECT" : "CONNECT") : "OPEN SITE"}
+          <a className="btn btn-sm" href={l.loginUrl} {...(l.loginUrl.startsWith("#") ? {} : { target: "_blank", rel: "noreferrer" })}>
+            {l.loginUrl.startsWith("#") ? (l.status === "ok" ? "CHANGE" : "SET UP") : l.live ? (l.status === "ok" ? "RECONNECT" : "CONNECT") : "OPEN SITE"}
           </a>
         )}
         {!l.live && (l.needsYou || (!compact && l.shown === "stale")) && (
@@ -149,11 +149,73 @@ export function LoginsView({ ops, now, onChanged }: { ops: OpsView; now: Date | 
           <LoginRow key={l.id} l={l} now={now} onChanged={onChanged} names={names} />
         ))}
       </section>
+      <CanvasTokenBox login={ops.logins.find((l) => l.id === "canvas-token")} onChanged={onChanged} />
       <p className="footnote">
         Your passwords are never stored here. Automations only report whether a site let them in. The sync runs in the Claude app&apos;s built-in browser on your
         Mac, so that&apos;s where you sign back in.
       </p>
     </>
+  );
+}
+
+/** Paste a Canvas access token so the dashboard reads Canvas itself. */
+function CanvasTokenBox({ login, onChanged }: { login?: LoginView; onChanged: () => void }) {
+  const [token, setToken] = useState("");
+  const [state, setState] = useState<{ busy?: boolean; msg?: string; bad?: boolean }>({});
+  const working = login?.status === "ok";
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setState({ busy: true });
+    const r = await fetch("/api/canvas/token", { method: "POST", body: JSON.stringify({ token }) });
+    const body = (await r.json().catch(() => ({}))) as { user?: string; error?: string };
+    if (r.ok) {
+      setToken("");
+      setState({ msg: `Connected as ${body.user}. Canvas now loads straight from Canvas.` });
+      onChanged();
+    } else setState({ msg: body.error ?? "That didn't work. Try again.", bad: true });
+  };
+  return (
+    <section className="panel" id="canvas-token" aria-labelledby="canvas-token-title">
+      <div className="panel-head">
+        <h2 id="canvas-token-title">CANVAS ACCESS TOKEN</h2>
+        <span className="tag" style={{ color: working ? "var(--teal)" : "var(--red)" }}>
+          {working ? "CONNECTED" : login?.status === "expired" ? "TOKEN REJECTED" : "NOT SET UP"}
+        </span>
+      </div>
+      <div className="panel-body">
+        <ol className="login-how" style={{ margin: "0 0 12px", paddingLeft: 18, lineHeight: 1.6 }}>
+          <li>
+            Open{" "}
+            <a href="https://canvas.ucdavis.edu/profile/settings" target="_blank" rel="noreferrer" style={{ color: "var(--blue-soft)" }}>
+              Canvas → Account → Settings
+            </a>{" "}
+            and sign in if asked.
+          </li>
+          <li>Scroll to Approved Integrations and press + NEW ACCESS TOKEN.</li>
+          <li>Purpose: Mission Control. Leave the expiry date empty. Press GENERATE TOKEN.</li>
+          <li>Copy the long token it shows, paste it below and press SAVE.</li>
+        </ol>
+        <form onSubmit={save} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            type="password"
+            autoComplete="off"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder={working ? "Paste a new token to replace it" : "Paste your Canvas token"}
+            aria-label="Canvas access token"
+            style={{ flex: "1 1 240px", minHeight: 44, padding: "0 12px", background: "transparent", border: "1px solid var(--line-strong)", color: "var(--text)" }}
+          />
+          <button className="btn btn-primary" type="submit" disabled={state.busy || token.trim().length < 20}>
+            {state.busy ? "CHECKING…" : "SAVE"}
+          </button>
+        </form>
+        {state.msg && (
+          <p className="row-meta" style={{ marginTop: 8, color: state.bad ? "var(--red)" : "var(--teal)" }}>
+            {state.msg}
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 
