@@ -128,7 +128,7 @@ export function demoClaude(): ClaudeSnapshot {
       estimated: true,
     },
     threads: [
-      { id: "sk1", title: "Onboarding flow redesign", project: "Solo Kitchen", state: "needs_you", step: "Waiting on your review", progress: 0.8 },
+      { id: "sk1", title: "Onboarding flow redesign", project: "Solo Kitchen", state: "needs_you", step: "Waiting on your review", progress: 0.8, origin: "mac", app: "desktop", updatedAt: new Date(Date.now() - 7 * 60_000).toISOString(), waiting: { kind: "permission", text: "Needs your OK to run `npm run build`", since: new Date(Date.now() - 7 * 60_000).toISOString() } },
       { id: "sk2", title: "Recipe import API", project: "Solo Kitchen", state: "running", step: "Running tests with 3 sub-agents", progress: 0.55 },
       { id: "d1", title: "Build life command dashboard", project: "Dashboard for Life", state: "running", step: "Building v1", progress: 0.3 },
       { id: "sk3", title: "Pricing page copy", project: "Solo Kitchen", state: "done", step: "Finished 2h ago", progress: 1 },

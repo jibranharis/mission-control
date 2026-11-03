@@ -456,7 +456,7 @@ function ThreadRow({ t, fmt }: { t: DashboardData["claude"]["threads"][number]; 
         </span>
       </span>
       <span className="row-meta">
-        {[t.project, t.origin === "mac" ? "ON THE MAC" : "CLOUD", t.model ? modelLabel(t.model) : null, t.tokens ? `${tokens(t.tokens)} TOKENS` : null, t.step, t.updatedAt ? fmt(t.updatedAt, { month: "short", day: "numeric", hour: "numeric" }) : null]
+        {[t.project, t.origin === "mac" ? "ON THE MAC" : "CLOUD", t.model ? modelLabel(t.model) : null, t.tokens ? `${tokens(t.tokens)} TOKENS` : null, t.waiting?.text ?? t.step, t.updatedAt ? fmt(t.updatedAt, { month: "short", day: "numeric", hour: "numeric" }) : null]
           .filter(Boolean)
           .join(" · ")
           .toUpperCase()}
