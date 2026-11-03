@@ -12,6 +12,8 @@ import { AlertsPanel, InboxView, ReconnectBanner } from "./InboxView";
 import { AutomationsView, LoginsView, OpsAlert } from "./OpsViews";
 import { PlanView, ProjectsView, StudyView } from "./LifeViews";
 import { GymView } from "./GymView";
+import { WaitingPanel } from "./WaitingPanel";
+import { waitingOnYou } from "@/lib/claude";
 
 const ProjectGraph = dynamic(() => import("./ProjectGraph").then((m) => m.ProjectGraph), {
   ssr: false,
@@ -172,6 +174,7 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
   const running = data.claude.threads.filter((t) => t.state === "running" || t.state === "needs_you");
   const degraded = Object.entries(data.sources).filter(([, s]) => s === "error");
   const relogins = data.ops.logins.filter((l) => l.needsYou).length;
+  const waiting = waitingOnYou(data.claude.threads).length;
   const prayer = useMemo(() => {
     if (!now) return null;
     const key = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
@@ -278,7 +281,17 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
               <strong>
                 {open.length - overdue} thing{open.length - overdue === 1 ? "" : "s"}
               </strong>{" "}
-              due today{overdue ? ` · ${overdue} overdue` : ""} · {running.length} Claude thread{running.length === 1 ? "" : "s"} active · {data.updates.length} updates
+              due today{overdue ? ` · ${overdue} overdue` : ""}
+              {waiting ? (
+                <>
+                  {" · "}
+                  <a href="#waiting-title" style={{ color: "var(--amber)" }}>
+                    Claude is waiting on you ({waiting})
+                  </a>
+                </>
+              ) : null}
+              {" · "}
+              {running.length} Claude thread{running.length === 1 ? "" : "s"} active · {data.updates.length} updates
             </p>
           </div>
           <div className="hero-actions">
@@ -291,6 +304,7 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
           </div>
         </section>
 
+        <WaitingPanel threads={data.claude.threads} now={now} />
         <ReconnectBanner data={data} />
         <OpsAlert ops={data.ops} now={now} onGo={go} onChanged={refresh} />
 
@@ -503,7 +517,7 @@ function ThreadsPanel({ data, running }: { data: DashboardData; running: number 
               </span>
             </span>
             <span className="row-meta">
-              {t.project.toUpperCase()} · {t.step}
+              {t.project.toUpperCase()} · {t.waiting?.text ?? t.step}
             </span>
             {t.progress != null && (
               <span className="meter">

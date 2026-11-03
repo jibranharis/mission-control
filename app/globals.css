@@ -520,3 +520,16 @@ a.sankey-card:hover { border-color: var(--line-strong); }
 .sk-stats { display: flex; gap: 12px; font-size: 10px; color: var(--text-2); margin-top: 2px; }
 .sankey-foot { display: flex; flex-wrap: wrap; gap: 20px 48px; padding: 12px 18px 18px; border-top: 1px solid var(--line-soft); }
 .sankey-legend { display: flex; flex-direction: column; gap: 8px; min-width: 220px; }
+
+/* Claude sessions waiting on you: top of Today, beside the re-login alerts. */
+.waiting { border-left: 2px solid var(--amber); }
+.waiting-row { align-items: center; }
+.waiting-row .tag { min-width: 112px; }
+.waiting-row .row-title { white-space: normal; }
+.waiting-go { flex: none; white-space: nowrap; }
+@media (max-width: 640px) {
+  .waiting-row { flex-wrap: wrap; }
+  .waiting-row .tag { min-width: 0; }
+  .waiting-row .row-main { flex-basis: 100%; order: 2; }
+  .waiting-go { order: 3; }
+}

@@ -109,8 +109,10 @@ def read_transcripts():
         mtime = os.path.getmtime(path)
         s = sessions.setdefault(sid, {"id": sid, "cwd": None, "title": None, "summary": None, "first": None, "last": None,
                                       "model": None, "tokens": 0, "cost": 0.0, "messages": 0, "mtime": 0,
-                                      "rows": defaultdict(row)})
+                                      "rows": defaultdict(row), "pending": {}, "lastRole": None, "lastText": "",
+                                      "lastAt": None, "entry": None})
         s["mtime"] = max(s["mtime"], mtime)
+        s.setdefault("path", path)
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 for line in f:
@@ -128,6 +130,7 @@ def read_transcripts():
                         s["last"] = max(s["last"] or ts, ts)
                         since = min(since or ts, ts)
                     t = e.get("type")
+                    track(s, e)
                     if t == "summary" and e.get("summary"):
                         s["summary"] = e["summary"]
                     msg = e.get("message") if isinstance(e.get("message"), dict) else None
@@ -168,6 +171,95 @@ def read_transcripts():
                   for d, r in sorted(by_day.items())][-60:],
     }
     return tokens, [s for s in sessions.values() if s["messages"]]
+
+
+# What a session is waiting on, read from the end of its transcript.
+QUIET = 45            # seconds a tool call can sit unanswered before it reads as a permission prompt
+WAIT_FOR = 24 * 3600  # older waits are treated as abandoned
+LONG_TOOLS = {"Task", "Agent", "TaskOutput", "BashOutput", "Monitor", "Sleep"}
+
+
+def track(s, e):
+    """Follows the conversation's last turn: tool calls still waiting for a result, and Claude's last words."""
+    if e.get("isSidechain") or e.get("isMeta"):
+        return
+    msg = e.get("message") if isinstance(e.get("message"), dict) else None
+    t = e.get("type")
+    if e.get("entrypoint") and not s.get("entry"):
+        s["entry"] = e["entrypoint"]
+    if not msg or t not in ("user", "assistant"):
+        return
+    c = msg.get("content")
+    blocks = c if isinstance(c, list) else [{"type": "text", "text": c}] if isinstance(c, str) else []
+    if t == "assistant":
+        text = " ".join(b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text").strip()
+        if text:
+            s["lastText"] = text
+        for b in blocks:
+            if isinstance(b, dict) and b.get("type") == "tool_use":
+                s["pending"][b.get("id")] = (b.get("name") or "", b.get("input") or {})
+        if any(isinstance(b, dict) and b.get("type") in ("text", "tool_use") for b in blocks):
+            s["lastRole"] = "assistant"
+            s["lastAt"] = e.get("timestamp")
+    else:
+        results = [b for b in blocks if isinstance(b, dict) and b.get("type") == "tool_result"]
+        for b in results:
+            s["pending"].pop(b.get("tool_use_id"), None)
+        if not results:
+            # A new prompt from you: whatever Claude asked before has been answered.
+            s["pending"].clear()
+            s["lastRole"] = "user"
+            s["lastText"] = ""
+
+
+def describe(name, inp):
+    if name == "Bash":
+        cmd = " ".join(str(inp.get("command", "")).split())
+        return f"run `{short(cmd, 70)}`" if cmd else "run a command"
+    if name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+        f = inp.get("file_path") or inp.get("notebook_path") or ""
+        return f"edit {os.path.basename(f)}" if f else "edit a file"
+    if name in ("WebFetch",):
+        return f"open {short(str(inp.get('url', '')), 60)}"
+    if name.startswith("mcp__"):
+        return "use " + name.split("__")[-1].replace("_", " ")
+    return f"use {name}" if name else "use a tool"
+
+
+def last_question(text):
+    """The question Claude ended its turn on, if its last line asks one."""
+    lines = [l for l in text.strip().splitlines() if l.strip()]
+    if not lines or "?" not in lines[-1]:
+        return None
+    last = lines[-1].replace("*", "").replace("`", "")
+    sentences = re.findall(r"[^.!?]*\?", last)
+    q = " ".join(sentences[-1].split()) if sentences else ""
+    return short(q, 140) if len(q) > 3 else "Asked you something"
+
+
+def waiting(s, now):
+    """("permission" | "question" | "plan", what it is) when the session is stuck until you answer."""
+    quiet = now - s["mtime"]
+    if quiet > WAIT_FOR:
+        return None
+    if s["pending"]:
+        name, inp = list(s["pending"].values())[-1]
+        if name == "AskUserQuestion":
+            qs = inp.get("questions") or []
+            q = qs[0].get("question") if qs and isinstance(qs[0], dict) else None
+            return ("question", q or "Has a question for you")
+        if name == "ExitPlanMode":
+            return ("plan", "Plan is ready for you to approve")
+        if name in LONG_TOOLS or (name == "Bash" and inp.get("run_in_background")):
+            return None
+        if quiet >= QUIET:
+            return ("permission", "Needs your OK to " + describe(name, inp))
+        return None
+    if s["lastRole"] == "assistant" and s["lastText"]:
+        q = last_question(s["lastText"])
+        if q:
+            return ("question", q)
+    return None
 
 
 def git(path, *args):
@@ -276,8 +368,7 @@ def main():
     tokens, sessions = read_transcripts()
     now = time.time()
     for s in sessions:
-        age = now - s["mtime"]
-        s["state"] = "running" if age < 180 else "idle" if age < 86400 else "done"
+        settle(s, now)
     sessions.sort(key=lambda s: s["mtime"], reverse=True)
 
     # Projects: every folder Claude worked in, plus the repos in the scan folders.
@@ -316,18 +407,96 @@ def main():
     projects.sort(key=lambda p: p["updatedAt"] or "", reverse=True)
     projects.sort(key=lambda p: not p["pinned"])
 
-    threads = [{
+    threads = [thread(s, project_of) for s in sessions[:40]]
+    push({"origin": "mac", "tokens": tokens, "projects": projects, "threads": threads})
+    print(f"{len(sessions)} sessions, {len(projects)} projects, {tokens['total']['messages']} messages, ${tokens['total']['cost']:.2f} API-equivalent")
+    waits = [t for t in threads if t.get("waiting")]
+    print(f"{len(waits)} waiting on you")
+    # Between full runs, keep an eye on sessions that might stop to ask you something,
+    # so a permission prompt or question reaches the dashboard within a minute.
+    if not sys.stdout.isatty() and os.environ.get("MC_WATCH", "1") != "0":
+        watch(sessions[:40], project_of, signature(threads))
+
+
+def settle(s, now):
+    age = now - s["mtime"]
+    w = waiting(s, now)
+    s["waiting"] = w
+    s["state"] = "needs_you" if w else "running" if age < 180 else "idle" if age < 86400 else "done"
+
+
+def app_of(s):
+    e = (s.get("entry") or "").lower()
+    return "desktop" if "desktop" in e else "vscode" if "vscode" in e or "ide" in e else "terminal"
+
+
+def thread(s, project_of):
+    t = {
         "id": s["id"], "title": s["summary"] or s["title"] or s["id"], "project": project_of.get(s["id"]) or project_name(s["cwd"] or "Other"),
         "state": s["state"], "step": f"{s['messages']} turns", "updatedAt": datetime.fromtimestamp(s["mtime"], timezone.utc).isoformat(),
-        "origin": "mac", "model": s["model"], "tokens": s["tokens"], "cost": round(s["cost"], 2),
-    } for s in sessions[:40]]
+        "origin": "mac", "model": s["model"], "tokens": s["tokens"], "cost": round(s["cost"], 2), "app": app_of(s),
+    }
+    if s["cwd"]:
+        t["cwd"] = s["cwd"]
+    if s.get("waiting"):
+        kind, text = s["waiting"]
+        t["waiting"] = {"kind": kind, "text": text, "since": s.get("lastAt") or t["updatedAt"]}
+    return t
 
-    body = json.dumps({"origin": "mac", "tokens": tokens, "projects": projects, "threads": threads}).encode()
+
+def signature(threads):
+    return sorted((t["id"], t["state"], (t.get("waiting") or {}).get("text")) for t in threads if t["state"] in ("needs_you", "running"))
+
+
+def rescan(s):
+    """Re-reads one transcript for its last turn (cheap compared with the full token count)."""
+    try:
+        mtime = os.path.getmtime(s["path"])
+    except OSError:
+        return False
+    if mtime == s["mtime"]:
+        return False
+    s["mtime"] = mtime
+    s["pending"], s["lastRole"], s["lastText"] = {}, None, ""
+    try:
+        with open(s["path"], "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                if isinstance(e, dict):
+                    track(s, e)
+    except OSError:
+        pass
+    return True
+
+
+def watch(sessions, project_of, last, every=30, until=540):
+    start = time.time()
+    while time.time() - start < until:
+        time.sleep(every)
+        now = time.time()
+        for s in sessions:
+            if now - s["mtime"] < WAIT_FOR:
+                rescan(s)
+            settle(s, now)
+        threads = [thread(s, project_of) for s in sorted(sessions, key=lambda s: s["mtime"], reverse=True)]
+        sig = signature(threads)
+        if sig != last:
+            last = sig
+            try:
+                push({"origin": "mac", "threads": threads, "watch": True})
+            except Exception as err:
+                print("watch push failed:", err)
+
+
+def push(payload):
+    body = json.dumps(payload).encode()
     req = urllib.request.Request(f"{URL}/api/ingest/claude", data=body, method="POST",
                                  headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=60) as res:
         print(res.status, res.read().decode()[:200])
-    print(f"{len(sessions)} sessions, {len(projects)} projects, {tokens['total']['messages']} messages, ${tokens['total']['cost']:.2f} API-equivalent")
 
 
 if __name__ == "__main__":

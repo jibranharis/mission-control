@@ -113,17 +113,7 @@ export async function buildDashboard(): Promise<DashboardData> {
       url: e.url,
     });
   }
-  for (const t of claude.data.threads.filter((t) => t.state === "needs_you")) {
-    tasks.push({
-      id: `claude:${t.id}`,
-      title: t.title,
-      meta: `${t.project.toUpperCase()} · CLAUDE IS WAITING ON YOU`,
-      source: "CLAUDE",
-      dueToday: true,
-      done: Boolean(done[`claude:${t.id}`]),
-      url: t.url,
-    });
-  }
+  // Claude sessions waiting on you have their own block at the top of Today, so they aren't repeated here.
   for (const t of todos) {
     const isDone = Boolean(done[t.id]);
     // Finished to-dos drop off the list the day after they were checked.

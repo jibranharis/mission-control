@@ -8,6 +8,8 @@ export type ClaudePush = Partial<Omit<ClaudeSnapshot, "usage">> & {
   threads?: ClaudeThread[];
   /** Which pusher this is; its threads replace only the threads it pushed before. */
   origin?: "cloud" | "mac";
+  /** A quick between-runs update from the Mac collector (threads only, not logged as a run). */
+  watch?: boolean;
 };
 
 /** Agent → projects → threads, for pushers that only send threads. */
@@ -62,11 +64,28 @@ export function cleanTitle(title: string | undefined, at?: string): string {
 }
 
 const RUNNING_FOR = 10 * 60_000;
+const WAITING_FOR = 24 * 3600_000;
 
-/** A thread's state can go stale between pushes: nothing runs for more than a few minutes unobserved. */
+/**
+ * A thread's state can go stale between pushes: nothing runs for more than a few minutes unobserved,
+ * and a question nobody answered in a day was left behind, not waiting.
+ */
 function settle(t: ClaudeThread): ClaudeThread {
+  if (t.state === "needs_you") {
+    const at = t.waiting?.since ?? t.updatedAt;
+    if (at && Date.now() - new Date(at).getTime() > WAITING_FOR && Date.now() - new Date(t.updatedAt ?? at).getTime() > WAITING_FOR)
+      return { ...t, state: "idle", waiting: undefined };
+    return t;
+  }
   if (t.state !== "running" || !t.updatedAt) return t;
   return Date.now() - new Date(t.updatedAt).getTime() > RUNNING_FOR ? { ...t, state: "idle" } : t;
+}
+
+/** Sessions stuck until you answer, oldest wait first. */
+export function waitingOnYou(threads: ClaudeThread[]): ClaudeThread[] {
+  return threads
+    .filter((t) => settle(t).state === "needs_you")
+    .sort((a, b) => (a.waiting?.since ?? a.updatedAt ?? "").localeCompare(b.waiting?.since ?? b.updatedAt ?? ""));
 }
 
 /** Threads from the push replace the ones its origin pushed last time; the other origin's stay. */

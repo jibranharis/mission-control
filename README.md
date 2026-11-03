@@ -79,6 +79,8 @@ The push is `ClaudePush` in [`lib/claude.ts`](lib/claude.ts): `usage` (the limit
 
 **Claude Code on your Mac (tokens by model, projects, flow charts).** [`scripts/claude-collector.py`](scripts/claude-collector.py) reads the transcripts Claude Code keeps in `~/.claude/projects`, adds up tokens per model, project and day (with an API-equivalent value at list prices), lists the sessions as threads, and builds a flow chart for every repo Claude has worked in (branches, commits, sessions) plus the repos under `~/Projects` and `~/Documents/GitHub`. Install it once and it runs every 10 minutes, fetching the latest collector from `main` before each run. An Anthropic API key isn't needed: the usage API only covers API billing, not a Pro or Max plan.
 
+It also spots sessions that are stuck until you answer: a tool call waiting for your permission, an `AskUserQuestion`, a plan waiting for approval, or a turn that ends on a question. Those come in as `state: "needs_you"` with a `waiting: { kind, text, since }` field and show at the top of Today under **Claude is waiting on you**. Between its 10-minute runs the collector re-reads recently active sessions every 30 seconds and pushes only when what's waiting changes, so a prompt reaches the dashboard within about a minute. Any other pusher (for claude.ai sessions) can send the same `waiting` field with a `url` to open.
+
 Install:
 
 ```bash

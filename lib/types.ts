@@ -149,6 +149,18 @@ export interface ClaudeThread {
   model?: string;
   tokens?: number;
   cost?: number;
+  /** Set while the session is stuck until you answer (state is then "needs_you"). */
+  waiting?: ClaudeWait;
+  /** Where a Mac session runs, so the dashboard can say how to get back to it. */
+  app?: "desktop" | "terminal" | "vscode";
+  cwd?: string;
+}
+
+export interface ClaudeWait {
+  kind: "permission" | "question" | "plan" | "review";
+  /** What it's waiting for, in plain words, e.g. "Needs your OK to run `npm test`". */
+  text: string;
+  since?: string;
 }
 
 export type GraphNodeKind = "agent" | "project" | "thread" | "subagent" | "branch" | "commit" | "pr" | "session";

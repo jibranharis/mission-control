@@ -58,7 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sou
     case "claude":
       if (!CLAUDE_FIELDS.some((k) => k in b)) return NextResponse.json({ error: `expected one of ${CLAUDE_FIELDS.join(", ")}` }, { status: 422 });
       await saveClaude(b as ClaudePush);
-      await recordRun({ automation: "claude-collector", summary: collectorSummary(b) }, { auto: true });
+      if (!b.watch) await recordRun({ automation: "claude-collector", summary: collectorSummary(b) }, { auto: true });
       break;
     case "docket": {
       if (!Array.isArray(b.items)) return NextResponse.json({ error: "expected items" }, { status: 422 });
