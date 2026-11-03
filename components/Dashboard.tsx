@@ -481,7 +481,7 @@ function ThreadsPanel({ data, running }: { data: DashboardData; running: number 
         </span>
       </div>
       {data.claude.threads.length === 0 && <p className="empty">No threads yet.</p>}
-      {data.claude.threads.map((t) => {
+      {homeThreads(data.claude.threads).map((t) => {
         const s = STATE[t.state];
         const body = (
           <>
@@ -511,8 +511,23 @@ function ThreadsPanel({ data, running }: { data: DashboardData; running: number 
           </div>
         );
       })}
+      {data.claude.threads.length > HOME_THREADS && (
+        <a className="row thread" href="#claude">
+          <span className="row-meta" style={{ color: "var(--blue-soft)" }}>
+            ALL {data.claude.threads.length} SESSIONS ON THE CLAUDE TAB →
+          </span>
+        </a>
+      )}
     </section>
   );
+}
+
+const HOME_THREADS = 3;
+
+/** Home shows what's live or waiting on you; with nothing live, the latest few. The full list is on the Claude tab. */
+function homeThreads(threads: DashboardData["claude"]["threads"]) {
+  const live = threads.filter((t) => t.state === "running" || t.state === "needs_you");
+  return (live.length ? live : threads).slice(0, HOME_THREADS);
 }
 
 function UsagePanel({ data, fmt, now }: { data: DashboardData; fmt: Fmt; now: Date | null }) {
