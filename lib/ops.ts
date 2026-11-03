@@ -361,7 +361,7 @@ async function googleLogins(now: Date): Promise<Login[]> {
 }
 
 /** The Canvas access token the dashboard reads Canvas with, checked live. */
-async function canvasLogin(now: Date): Promise<Login> {
+async function canvasLogin(now: Date): Promise<Login | null> {
   const c = await canvasTokenStatus().catch(() => null);
   const base = {
     id: "canvas-token",
@@ -370,8 +370,8 @@ async function canvasLogin(now: Date): Promise<Login> {
     live: true,
     loginUrl: "#logins",
   };
-  if (!c?.set)
-    return { ...base, status: "unchecked", note: "Not set up yet. With it, the dashboard reads Canvas itself and doesn't depend on the Mac browser staying signed in.", howTo: "Use the CANVAS ACCESS TOKEN box below." };
+  // Optional (UC Davis doesn't let students make tokens), so it only shows once one is saved.
+  if (!c?.set) return null;
   if (c.error) return { ...base, status: "expired", checkedAt: c.errorAt, note: c.error, howTo: "Make a new token in Canvas and paste it in the CANVAS ACCESS TOKEN box below." };
   return { ...base, status: "ok", account: c.user, checkedAt: c.okAt ?? now.toISOString() };
 }
@@ -438,7 +438,7 @@ export async function buildOps(now = new Date(), tz = TIMEZONE): Promise<OpsView
   for (const [id, l] of Object.entries(stored)) loginMap.set(id, { ...loginMap.get(id), ...l });
   for (const l of await googleLogins(now)) loginMap.set(l.id, l);
   const canvasToken = await canvasLogin(now);
-  loginMap.set(canvasToken.id, canvasToken);
+  if (canvasToken) loginMap.set(canvasToken.id, canvasToken);
   const order: Record<string, number> = { expired: 0, error: 1, stale: 2, pending: 3, unchecked: 4, ok: 5 };
   const logins: LoginView[] = [...loginMap.values()]
     .map((l) => {
