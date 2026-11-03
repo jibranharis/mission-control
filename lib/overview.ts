@@ -1,9 +1,14 @@
 import { TIMEZONE } from "@/lib/time";
 import type { ClaudeProject, ClaudeThread, GraphNode } from "@/lib/types";
 
+/** A node on the map; weight is how much Claude it used (tokens), for line thickness. */
+export type MapNode = GraphNode & { weight?: number };
+
 export interface OverviewColumn {
-  project: GraphNode;
-  children: GraphNode[];
+  project: MapNode;
+  children: MapNode[];
+  /** The project behind the column (absent for "Other repos" and thread-only names). */
+  source?: ClaudeProject;
 }
 
 /** The overview map: Claude on top, one column per project, its threads stacked below. */
@@ -39,7 +44,7 @@ const RANK: Record<string, number> = { needs_you: 0, running: 1, failed: 2, idle
 const byUrgency = (a: ClaudeThread, b: ClaudeThread) =>
   (RANK[a.state] ?? 5) - (RANK[b.state] ?? 5) || (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
 
-function threadNode(t: ClaudeThread): GraphNode {
+function threadNode(t: ClaudeThread): MapNode {
   const where = t.origin === "cloud" ? "CLOUD" : t.app === "desktop" ? "DESKTOP" : t.app === "vscode" ? "VS CODE" : "MAC";
   return {
     id: `thread:${t.id}`,
@@ -47,6 +52,7 @@ function threadNode(t: ClaudeThread): GraphNode {
     label: t.title,
     state: t.state,
     url: t.url,
+    weight: t.tokens ?? 0,
     meta: [t.state === "needs_you" ? "NEEDS YOU" : t.state === "running" ? "RUNNING" : null, where, day(t.updatedAt)].filter(Boolean).join(" · "),
   };
 }
@@ -89,17 +95,19 @@ export function overview(projects: ClaudeProject[], threads: ClaudeThread[]): Ov
         kind: "project",
         label: g.name,
         url: g.project?.url,
+        weight: Math.max(g.project?.stats.tokens ?? 0, g.threads.reduce((a, t) => a + (t.tokens ?? 0), 0)),
         meta: [open.length ? `${open.length} OPEN` : null, `${sessions} SESSION${sessions === 1 ? "" : "S"}`, last(g) ? day(last(g)) : null]
           .filter(Boolean)
           .join(" · "),
       },
       children,
+      source: g.project,
     };
   });
 
   if (quiet.length) {
     const pid = "project:other-repos";
-    const children: GraphNode[] = quiet.map(([key, g]) => ({
+    const children: MapNode[] = quiet.map(([key, g]) => ({
       id: `repo:${key}`,
       kind: "branch" as const,
       label: g.name,
