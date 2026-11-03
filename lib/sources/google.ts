@@ -73,13 +73,41 @@ async function markReconnect(email: string, reason: string) {
   await setJSON(ACCOUNTS_KEY, all);
 }
 
+/** Problems from the latest reads in this server instance, by account and area. */
+const problems = new Map<string, Partial<Record<"mail" | "calendar", string>>>();
+
+/** Turns a Google API error into something a person can act on. */
+export function plainError(err: unknown, area: "mail" | "calendar"): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const api = area === "mail" ? "Gmail API" : "Google Calendar API";
+  if (/SERVICE_DISABLED|has not been used|is disabled|accessNotConfigured/i.test(msg))
+    return `The ${api} isn't turned on. In Google Cloud, search "${api}" and click Enable, then wait 2 minutes.`;
+  if (/insufficient|ACCESS_TOKEN_SCOPE_INSUFFICIENT|PERMISSION_DENIED/i.test(msg))
+    return `Google didn't grant ${area} access. Click Remove, connect again, and tick every box.`;
+  if (/admin|domain policy|restricted/i.test(msg)) return "Your school blocks this app for this account.";
+  if (err instanceof ReconnectError) return "Google signed this account out.";
+  return `Couldn't read ${area}: ${msg.slice(0, 140)}`;
+}
+
+export function noteProblem(email: string, area: "mail" | "calendar", err?: unknown) {
+  const cur = problems.get(email) ?? {};
+  if (err === undefined) delete cur[area];
+  else cur[area] = plainError(err, area);
+  problems.set(email, cur);
+}
+
 export async function accountStatuses(): Promise<GoogleAccountStatus[]> {
-  return (await listAccounts()).map((a) => ({
-    email: a.email,
-    label: a.label,
-    status: a.needsReconnect ? "reconnect" : "ok",
-    detail: a.needsReconnect,
-  }));
+  return (await listAccounts()).map((a) => {
+    const p = problems.get(a.email);
+    const problem = [p?.mail, p?.calendar].filter(Boolean).join(" ");
+    return {
+      email: a.email,
+      label: a.label,
+      status: a.needsReconnect ? "reconnect" : "ok",
+      detail: a.needsReconnect,
+      ...(problem ? { problem } : {}),
+    };
+  });
 }
 
 export class ReconnectError extends Error {}
@@ -246,7 +274,17 @@ export async function fetchCalendar(): Promise<CalendarData | null> {
   if (!accounts.length) return null;
   const from = startOfDay(0);
   const to = startOfDay(14);
-  const results = await Promise.allSettled(accounts.map((a) => accountEvents(a, from, to)));
+  const results = await Promise.allSettled(
+    accounts.map((a) =>
+      accountEvents(a, from, to).then(
+        (r) => (noteProblem(a.email, "calendar"), r),
+        (err) => {
+          noteProblem(a.email, "calendar", err);
+          throw err;
+        },
+      ),
+    ),
+  );
   const ok = results.filter((r): r is PromiseFulfilledResult<(CalendarEvent & { _uid: string })[]> => r.status === "fulfilled");
   if (!ok.length) throw (results[0] as PromiseRejectedResult).reason;
   // The same meeting can sit on two accounts' calendars; keep the editable copy.

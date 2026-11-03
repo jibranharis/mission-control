@@ -296,7 +296,13 @@ export function InboxView({ data, fmt, onChanged }: { data: DashboardData; fmt: 
           {!data.mail.accounts.length ? (
             <p className="empty">Connect a Google account on the right and your mail shows up here.</p>
           ) : shown.length === 0 ? (
-            <p className="empty">{filter === "needs" ? "Inbox zero on what matters. Nice." : "Nothing here."}</p>
+            <p className="empty">
+              {data.mail.accounts.some((a) => a.problem)
+                ? "Mail couldn't be read. The account list on the right says why."
+                : filter === "needs"
+                  ? `Nothing important right now.${m.alerts.length ? ` ${m.alerts.length} other email${m.alerts.length === 1 ? "" : "s"} under ALL.` : ""}`
+                  : "Nothing here."}
+            </p>
           ) : (
             <div className="alerts">
               {shown.map((a) => (
@@ -313,7 +319,7 @@ export function InboxView({ data, fmt, onChanged }: { data: DashboardData; fmt: 
           </div>
           {data.mail.accounts.map((a, i) => (
             <div key={a.email} className="row acct">
-              <span className="live-dot" style={{ background: a.status === "ok" ? "var(--teal)" : "var(--amber)", animation: "none" }} />
+              <span className="live-dot" style={{ background: a.status === "ok" && !a.problem ? "var(--teal)" : "var(--amber)", animation: "none" }} />
               <span className="row-main">
                 <span className="row-title">{a.label}</span>
                 <span className="row-meta">
@@ -321,6 +327,7 @@ export function InboxView({ data, fmt, onChanged }: { data: DashboardData; fmt: 
                   {i === 0 && a.status === "ok" ? " · NEW EVENTS GO HERE" : ""}
                   {a.status === "reconnect" ? " · SIGNED OUT" : ""}
                 </span>
+                {a.problem && a.status === "ok" && <span className="acct-problem">{a.problem}</span>}
               </span>
               {a.status === "reconnect" ? (
                 <a className="mini-btn primary" href={`/api/google/connect?hint=${encodeURIComponent(a.email)}`}>
