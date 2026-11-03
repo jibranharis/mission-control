@@ -7,6 +7,7 @@ import { CoursesView, DeenView, ExamsStrip, NoDocket, NotesView, WeekView, WorkV
 import { PRAYERS, PRAYER_ORDER, prayerTimes } from "@/lib/deen";
 import { ClaudeView } from "./ClaudeView";
 import { AutomationsView, LoginsView, OpsAlert } from "./OpsViews";
+import { PlanView, ProjectsView, StudyView } from "./LifeViews";
 
 const ProjectGraph = dynamic(() => import("./ProjectGraph").then((m) => m.ProjectGraph), {
   ssr: false,
@@ -18,9 +19,12 @@ const REFRESH_MS = 3 * 60_000;
 const TABS = [
   ["today", "TODAY"],
   ["claude", "CLAUDE"],
+  ["projects", "PROJECTS"],
+  ["plan", "PLAN"],
   ["courses", "COURSES"],
   ["week", "WEEK"],
-  ["work", "WORK"],
+  ["work", "SCHOOLWORK"],
+  ["study", "STUDY"],
   ["deen", "DEEN"],
   ["notes", "NOTES"],
   ["automations", "AUTOMATIONS"],
@@ -203,6 +207,12 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
             <AutomationsView ops={data.ops} now={now} fmt={fmt} />
           ) : tab === "logins" ? (
             <LoginsView ops={data.ops} now={now} onChanged={refresh} />
+          ) : tab === "projects" ? (
+            <ProjectsView tz={tz} now={now} />
+          ) : tab === "plan" ? (
+            <PlanView v={data.docket} tz={tz} now={now} onToggle={setDone} />
+          ) : tab === "study" ? (
+            <StudyView v={data.docket} tz={tz} now={now} />
           ) : tab === "deen" ? (
             <DeenView v={data.docket} tz={tz} now={now} />
           ) : !data.docket ? (
