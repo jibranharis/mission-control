@@ -10,6 +10,7 @@ import { GYM_KEY, normalizeGym, planGym, type GymData } from "@/lib/gym";
 import { DOCKET_PREFIX, docketBlocks, docketCalendar, type DocketView } from "@/lib/sources/docket";
 import { TIMEZONE, dateKey, isToday, startOfDay } from "@/lib/time";
 import { buildOps } from "@/lib/ops";
+import { DEFAULT_PROJECTS, LIFE_KEYS, type LifeProject, type PlanBlock } from "@/lib/life";
 
 export interface Todo {
   id: string;
@@ -171,6 +172,28 @@ export async function buildDashboard(): Promise<DashboardData> {
       source: "GYM",
       dueToday: true,
       done: lift.status === "done",
+    });
+  }
+  // Anything moved onto today in the Plan tab. When it's already on the list (an assignment due today), it isn't repeated.
+  const [plan, projects] = await Promise.all([getJSON<PlanBlock[]>(LIFE_KEYS.plan, []), getJSON<LifeProject[]>(LIFE_KEYS.projects, DEFAULT_PROJECTS)]);
+  const projectTask = (ref: string) => {
+    const [, pid, tid] = ref.split(":");
+    return projects.find((p) => p.id === pid)?.tasks.find((t) => t.id === tid);
+  };
+  const listed = new Set(tasks.map((t) => t.id));
+  for (const b of plan) {
+    if (b.date !== todayKey || (b.ref && listed.has(b.ref))) continue;
+    const refDone = b.ref ? (b.ref.startsWith("project:") ? projectTask(b.ref)?.done : Boolean(done[b.ref])) : false;
+    const [h, m] = (b.time ?? "").split(":").map(Number);
+    const at = Number.isFinite(h) && Number.isFinite(m) ? new Date(startOfDay(0).getTime() + (h * 60 + m) * 60_000).toISOString() : undefined;
+    tasks.push({
+      id: `plan:${b.id}`,
+      title: b.title,
+      meta: `PLANNED TODAY${at ? ` · ${timeFmt(at).toUpperCase()}` : ""}${b.minutes ? ` · ${b.minutes}M` : ""}`,
+      source: "PLAN",
+      due: at,
+      dueToday: true,
+      done: b.done || Boolean(refDone),
     });
   }
   const first = (t: TaskItem) => (t.source === "LOGIN" ? 0 : 1);

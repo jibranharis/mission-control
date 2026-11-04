@@ -49,6 +49,7 @@ const SOURCE_COLOR: Record<TaskItem["source"] | UpdateItem["source"], string> = 
   GITHUB: "var(--silver)",
   LOGIN: "var(--red)",
   GYM: "var(--teal)",
+  PLAN: "var(--blue)",
 };
 
 const STATE: Record<ThreadState, { label: string; color: string }> = {
@@ -164,6 +165,11 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
         tasks: d.docket.tasks?.map((t) => (`docket:task:${t.id}` === id ? { ...t, status: done ? "done" : "todo" } : t)),
       },
     }));
+    // Plan blocks also check off what they plan, so reload once the server has done that.
+    if (id.startsWith("plan:")) {
+      await fetch("/api/done", { method: "POST", body: JSON.stringify({ id, done }) });
+      return refresh();
+    }
     await fetch("/api/done", { method: "POST", body: JSON.stringify({ id, done }) });
   };
 
