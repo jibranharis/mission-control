@@ -52,3 +52,59 @@ export const KEYS = {
   automations: "mc:automations",
   logins: "mc:logins",
 } as const;
+
+/* Hashes: one field per record, for collections too big to rewrite whole. */
+
+const memoryHashes = new Map<string, Map<string, string>>();
+
+export async function hashGetAll<T>(key: string): Promise<Record<string, T>> {
+  const out: Record<string, T> = {};
+  if (storeIsPersistent) {
+    const flat = ((await redis(["HGETALL", key])) as string[] | null) ?? [];
+    for (let i = 0; i + 1 < flat.length; i += 2) {
+      try {
+        out[flat[i]] = JSON.parse(flat[i + 1]) as T;
+      } catch {
+        /* skip a broken record */
+      }
+    }
+  } else {
+    for (const [k, v] of memoryHashes.get(key) ?? []) out[k] = JSON.parse(v) as T;
+  }
+  return out;
+}
+
+export async function hashGet<T>(key: string, field: string): Promise<T | null> {
+  const raw = storeIsPersistent ? ((await redis(["HGET", key, field])) as string | null) : memoryHashes.get(key)?.get(field) ?? null;
+  if (raw == null) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+/** Writes many records, in chunks so no single request gets too big. */
+export async function hashSet(key: string, records: Record<string, unknown>): Promise<void> {
+  const entries = Object.entries(records);
+  if (!storeIsPersistent) {
+    const m = memoryHashes.get(key) ?? new Map<string, string>();
+    for (const [k, v] of entries) m.set(k, JSON.stringify(v));
+    memoryHashes.set(key, m);
+    return;
+  }
+  for (let i = 0; i < entries.length; i += 200) {
+    const cmd: string[] = ["HSET", key];
+    for (const [k, v] of entries.slice(i, i + 200)) cmd.push(k, JSON.stringify(v));
+    await redis(cmd);
+  }
+}
+
+export async function hashDelete(key: string, fields: string[]): Promise<void> {
+  if (!fields.length) return;
+  if (!storeIsPersistent) {
+    for (const f of fields) memoryHashes.get(key)?.delete(f);
+    return;
+  }
+  for (let i = 0; i < fields.length; i += 500) await redis(["HDEL", key, ...fields.slice(i, i + 500)]);
+}

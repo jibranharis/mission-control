@@ -12,6 +12,7 @@ import { AlertsPanel, InboxView, ReconnectBanner } from "./InboxView";
 import { AutomationsView, LoginsView, OpsAlert } from "./OpsViews";
 import { PlanView, ProjectsView, StudyView } from "./LifeViews";
 import { GymView } from "./GymView";
+import { JobsAlert, JobsView } from "./JobsView";
 import { WaitingPanel } from "./WaitingPanel";
 import { waitingOnYou, withPinned } from "@/lib/claude";
 
@@ -27,6 +28,7 @@ const TABS = [
   ["inbox", "INBOX"],
   ["claude", "CLAUDE"],
   ["projects", "PROJECTS"],
+  ["jobs", "JOB APPS"],
   ["plan", "PLAN"],
   ["courses", "COURSES"],
   ["week", "WEEK"],
@@ -252,6 +254,8 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
             <AutomationsView ops={data.ops} now={now} fmt={fmt} />
           ) : tab === "logins" ? (
             <LoginsView ops={data.ops} now={now} onChanged={refresh} />
+          ) : tab === "jobs" ? (
+            <JobsView tz={tz} now={now} />
           ) : tab === "projects" ? (
             <ProjectsView tz={tz} now={now} />
           ) : tab === "plan" ? (
@@ -313,6 +317,7 @@ export function Dashboard({ initial, owner, signOut }: { initial: DashboardData;
         <WaitingPanel threads={data.claude.threads} now={now} />
         <ReconnectBanner data={data} />
         <OpsAlert ops={data.ops} now={now} onGo={go} onChanged={refresh} />
+        <JobsAlert tz={tz} now={now} onOpen={() => go("jobs")} />
 
         {data.docket && <ExamsStrip v={data.docket} tz={tz} now={now} />}
 

@@ -18,6 +18,8 @@ export const GOOGLE_SCOPES = [
   "email",
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/gmail.readonly",
+  // Lets the job bot email you (from your own account, to yourself).
+  "https://www.googleapis.com/auth/gmail.send",
 ];
 
 export function redirectUri(origin: string) {

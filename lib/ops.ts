@@ -113,6 +113,14 @@ export const DEFAULT_AUTOMATIONS: Automation[] = [
     where: "Mac · every 10 min",
     schedule: { everyMin: 10, whenAwake: true },
   },
+  {
+    id: "job-apply",
+    name: "Job applications",
+    description: "Finds internships and jobs, fills out the best ones and stops before Submit. Never submits.",
+    where: "Cloud search + Claude scheduled task on the Mac",
+    schedule: { times: ["10:00", "20:00"] },
+    url: "/#jobs",
+  },
 ];
 
 export const DEFAULT_LOGINS: Login[] = [
@@ -121,6 +129,9 @@ export const DEFAULT_LOGINS: Login[] = [
   { id: "labflow", name: "LabFlow", loginUrl: "https://canvas.ucdavis.edu/courses/1111257/modules/items/2771448", howTo: `${IN_BROWSER_PANE} LabFlow opens from the CHE 2A Canvas module.`, usedBy: ["docket-sync"], status: "unchecked" },
   { id: "webwork", name: "WeBWorK", loginUrl: "https://canvas.ucdavis.edu/courses/1096762", howTo: `${IN_BROWSER_PANE} WeBWorK opens from the MAT 21A Canvas assignments.`, usedBy: ["docket-sync"], status: "unchecked" },
   { id: "claude", name: "claude.ai usage page", loginUrl: "https://claude.ai/settings/usage", howTo: IN_BROWSER_PANE, usedBy: ["docket-sync"], status: "unchecked" },
+  { id: "linkedin", name: "LinkedIn", loginUrl: "https://www.linkedin.com/login", howTo: IN_BROWSER_PANE, usedBy: ["job-apply"], status: "unchecked" },
+  { id: "handshake", name: "Handshake (UC Davis)", loginUrl: "https://ucdavis.joinhandshake.com/login", howTo: `${IN_BROWSER_PANE} Pick UC Davis and sign in with your school account.`, usedBy: ["job-apply"], status: "unchecked" },
+  { id: "jobright", name: "Jobright", loginUrl: "https://jobright.ai/", howTo: IN_BROWSER_PANE, usedBy: ["job-apply"], status: "unchecked" },
   { id: "google-calendar", name: "Google Calendar connector", loginUrl: "https://claude.ai/settings/connectors", howTo: "Open claude.ai, go to Settings, then Connectors, find Google Calendar and press Connect (or Reconnect).", usedBy: ["docket-sync"], status: "unchecked" },
 ];
 
