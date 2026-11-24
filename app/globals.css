@@ -562,3 +562,17 @@ a.sankey-card:hover { border-color: var(--line-strong); }
 .graph.flowmap .fm.junction { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--line-strong); background: var(--bg); }
 .graph.flowmap .fm.output { width: 220px; height: 54px; padding: 6px 14px; border: 1px solid var(--line-strong); border-radius: 25px; background: var(--panel-raised); display: flex; flex-direction: column; justify-content: center; gap: 2px; }
 .graph.flowmap .react-flow__minimap { margin: 10px; }
+
+/* Job applications */
+.jobs-alert { flex-direction: row; align-items: center; gap: 14px; padding: 14px 18px; border-color: #1f4a43; }
+.jobs-alert:hover { background: var(--hover); }
+.jobs-alert .row-title strong { color: var(--teal); }
+.jobs-tools { padding: 12px 18px; }
+.job-row .row-title { white-space: normal; }
+.job-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.job-answers { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.job-answer { border: 1px solid var(--line); background: var(--panel-raised); padding: 10px 12px; }
+.job-answer-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.job-answer p { margin: 8px 0 0; white-space: pre-wrap; font-size: 14px; color: var(--text-2); line-height: 1.5; }
+@media (max-width: 420px) { .job-row { flex-direction: column; gap: 8px; } }
+.hero .jobs-sched { margin: 0; max-width: 380px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--muted); line-height: 1.6; }
