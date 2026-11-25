@@ -240,7 +240,12 @@ export async function saveJobs(inputs: JobInput[]): Promise<{ added: number; upd
     if (answers?.length) next.answers = answers;
     if (raw.note !== undefined) next.note = clean(raw.note, 400);
     const locked = prev.status === "submitted" || prev.status === "skipped";
-    if (status && !locked && status !== prev.status && status !== "submitted" && status !== "skipped") {
+    // The bot may skip an opening it hasn't worked on (e.g. juniors and seniors only), with a note saying why.
+    if (status === "skipped" && prev.status === "new") {
+      next.status = "skipped";
+      next.statusAt = now;
+      next.workedAt = now;
+    } else if (status && !locked && status !== prev.status && status !== "submitted" && status !== "skipped") {
       next.status = status;
       next.statusAt = now;
       if (status !== "new") next.workedAt = now;
@@ -285,7 +290,7 @@ interface SimplifyListing {
 }
 
 const SIMPLIFY_URL = "https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/.github/scripts/listings.json";
-const GRAD_ONLY = /\b(ph\.?d|doctoral|master'?s|m\.?s\.? student|mba)\b/i;
+const GRAD_ONLY = /\b(ph\.?d|doctoral|master'?s|m\.?s\.? student|mba|graduate[- ]level|graduate (intern|engineer|student|research)\w*|senior [a-z ]*intern)\b/i;
 
 /** Open summer 2027 internships an undergrad can apply to. */
 function fits(l: SimplifyListing): boolean {
@@ -293,7 +298,7 @@ function fits(l: SimplifyListing): boolean {
   if (!(l.terms ?? []).some((t) => /summer 2027/i.test(t))) return false;
   const degrees = l.degrees ?? [];
   if (degrees.length && !degrees.some((d) => /bachelor/i.test(d))) return false;
-  if (GRAD_ONLY.test(l.title) && !/bachelor|undergrad/i.test(l.title)) return false;
+  if (GRAD_ONLY.test(l.title.replace(/undergraduate/gi, "")) && !/bachelor/i.test(l.title)) return false;
   return l.category !== "Quant";
 }
 
